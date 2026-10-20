@@ -1,0 +1,12 @@
+node_modules/
+dist/
+blender/out/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+.vite/
+vite.config.ts.timestamp-*
+*.tsbuildinfo
+.env
+.env.*
