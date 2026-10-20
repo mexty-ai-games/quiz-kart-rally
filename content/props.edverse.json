@@ -1729,8 +1729,12 @@
   },
   "howSteps": [
    {
-    "en": "Your kart drives by itself: you steer.",
-    "fr": "Ton kart avance tout seul : tu tournes le volant."
+    "en": "Hold the gas to drive (↑ on a keyboard, the orange pedal on a phone) and steer left and right.",
+    "fr": "Garde le pied sur l'accélérateur pour rouler (↑ au clavier, la pédale orange sur un téléphone) et tourne à gauche et à droite."
+   },
+   {
+    "en": "Press the gas when the last light comes on: rocket start!",
+    "fr": "Appuie sur l'accélérateur quand la dernière lumière s'allume : départ fusée !"
    },
    {
     "en": "Before each row of boxes, a question appears. Every box carries one answer.",
@@ -1758,12 +1762,12 @@
    }
   ],
   "controlsKeys": {
-   "en": "← → or A D: steer · ↓ or S: brake · Shift: drift (hold in a turn, let go for a boost) · Space or E: use your bonus · Esc: pause",
-   "fr": "← → ou Q D : tourner · ↓ ou S : freiner · Maj : dérapage (tiens-le dans un virage, lâche pour un boost) · Espace ou E : utiliser le bonus · Échap : pause"
+   "en": "↑ or W: accelerate · ← → or A D: steer · ↓ or S: brake · Shift: drift (hold in a turn, let go for a boost) · Space or E: use your bonus · Esc: pause",
+   "fr": "↑ ou Z : accélérer · ← → ou Q D : tourner · ↓ ou S : freiner · Maj : dérapage (tiens-le dans un virage, lâche pour un boost) · Espace ou E : utiliser le bonus · Échap : pause"
   },
   "controlsTouch": {
-   "en": "◀ ▶: steer · Brake: slow down · Drift: hold in a turn, let go for a boost · Tap the bonus box at the top to use it",
-   "fr": "◀ ▶ : tourner · Frein : ralentir · Dérapage : tiens-le dans un virage, lâche pour un boost · Touche la case bonus en haut pour l'utiliser"
+   "en": "Orange pedal: accelerate · ◀ ▶: steer · Brake: slow down · Drift: hold in a turn (it keeps accelerating), let go for a boost · Tap the bonus box at the top to use it",
+   "fr": "Pédale orange : accélérer · ◀ ▶ : tourner · Frein : ralentir · Dérapage : tiens-le dans un virage (il accélère aussi), lâche pour un boost · Touche la case bonus en haut pour l'utiliser"
   },
   "bonusesTitle": {
    "en": "Bonuses",
@@ -1836,6 +1840,14 @@
   "brake": {
    "en": "Brake",
    "fr": "Frein"
+  },
+  "gas": {
+   "en": "Gas",
+   "fr": "Gaz"
+  },
+  "rocketStart": {
+   "en": "Rocket start!",
+   "fr": "Départ fusée !"
   },
   "left": {
    "en": "Left",

@@ -120,6 +120,10 @@ export interface UiText {
   coins: LocalizedText;
   drift: LocalizedText;
   brake: LocalizedText;
+  /** touch pedal: hold to accelerate */
+  gas?: LocalizedText;
+  /** flash when gas is pressed at the right moment of the countdown */
+  rocketStart?: LocalizedText;
   left: LocalizedText;
   right: LocalizedText;
   correct: LocalizedText;
@@ -587,7 +591,8 @@ export const Block: React.FC<BlockProps> = (props) => {
       switch (ev.type) {
         case "go":
           mexty.gameplayStart();
-          showFlash({ kind: "go", main: t(ui.go) }, 900);
+          if (ev.rocket) showFlash({ kind: "go", main: t(ui.go), sub: ui.rocketStart ? t(ui.rocketStart) : "🚀" }, 1300);
+          else showFlash({ kind: "go", main: t(ui.go) }, 900);
           break;
         case "lap":
           showFlash({ kind: "lap", main: ev.lap === ev.laps ? t(ui.finalLap) : `${t(ui.lap)} ${ev.lap}/${ev.laps}` }, 1500);

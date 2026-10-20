@@ -26,7 +26,7 @@ Race alone against four rivals, or online against up to seven friends.
   - **Super nova:** a few seconds of speed that knocks rivals aside.
 - **Wrong answer:** the kart spins out and loses 2 coins, and the right answer and its explanation flash on screen. The shield absorbs it.
 - **Driving:**
-  - The kart accelerates by itself; the player steers and brakes.
+  - Hold the gas to drive, steer and brake. Press the gas during the last count of the countdown for a rocket start.
   - Coins add top speed (up to 10).
   - Boost pads on the road.
   - Drift with mini-turbos: blue sparks after a short drift, orange after a long one.
@@ -40,9 +40,9 @@ Race alone against four rivals, or online against up to seven friends.
 - **Race flow:** an intro fly-over, the countdown on the start arch's lamps, then 3 laps. The final lap speeds up the music. The top three finish on a podium with a trophy and fireworks.
 - **Results:** position, time, right answers, standings, and the log of every question with the right answer next to each mistake.
 - **Controls:**
-  - **Keyboard:** arrows, WASD or ZQSD; Shift to drift; Space or E for the bonus; Esc to pause.
-  - **Phone:** buttons for left, right, brake and drift; tap the bonus box to use it.
-  - **Gamepad:** supported.
+  - **Keyboard:** ↑ (or W / Z) to accelerate, ← → to steer, ↓ to brake (arrows, WASD or ZQSD); Shift to drift; Space or E for the bonus; Esc to pause.
+  - **Phone:** left and right on the left; brake, drift and a big orange gas pedal on the right (drift keeps accelerating); tap the bonus box to use it.
+  - **Gamepad:** stick to steer, A or right trigger to accelerate, B or left trigger to brake, bumpers to drift, X or Y for the bonus.
 - **Sound:** four songs and every sound effect are synthesised in code with WebAudio, so there are no audio files.
 
 <img src="docs/screenshots/mobile.jpg" alt="Phone landscape layout in the desert: steer buttons bottom-left, brake and drift bottom-right, a shield bonus ready at the top" width="420" align="right">

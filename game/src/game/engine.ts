@@ -98,7 +98,7 @@ export interface RaceResult {
 }
 
 export type RaceEvent =
-  | { type: "go" }
+  | { type: "go"; rocket?: boolean }
   | { type: "lap"; lap: number; laps: number }
   | { type: "question"; q: number; prompt: string }
   | { type: "answer"; q: number; correct: boolean; picked: string; right: string; prompt: string; explain: string; shielded: boolean }
@@ -257,6 +257,8 @@ export class Engine {
   paused = false;
   laps = 3;
   count = 4;
+  /** countdown time left when the player started holding the gas (-1: not holding) */
+  private gasFrom = -1;
   private phaseT = 0;
   private raceT = 0;
   private acc = 0;
@@ -475,6 +477,7 @@ export class Engine {
     this.phase = st.mode === "demo" ? "demo" : "intro";
     this.phaseT = 0;
     this.count = 4;
+    this.gasFrom = -1;
     this.raceT = 0;
     this.acc = 0;
     this.asked = this.answered = this.correct = 0;
@@ -828,6 +831,12 @@ export class Engine {
       }
       if (this.phase === "countdown") {
         const left = this.toGo();
+        // rocket start: press the gas during the last count ("1") and hold it through GO
+        if (this.player && !this.paused) {
+          const gas = this.input.read().throttle > 0.5;
+          if (!gas) this.gasFrom = -1;
+          else if (this.gasFrom < 0) this.gasFrom = left;
+        }
         const c = Math.max(0, Math.ceil(left));
         if (c !== this.count && c <= 3) {
           this.count = c;
@@ -843,7 +852,16 @@ export class Engine {
           this.raceT = st.mode === "online" ? Math.max(0, -left) : 0;
           this.setLamps(5);
           this.sfx.go();
-          this.onEvent({ type: "go" });
+          const rocket = !!this.player && this.gasFrom > 0 && this.gasFrom <= 1.0;
+          if (rocket && this.player) {
+            const k = this.player.kart;
+            k.boostT = Math.max(k.boostT, 1.1);
+            k.speed = Math.max(k.speed, 9);
+            this.sfx.miniTurbo(2);
+            this.fx.emit(20, this.tmp.copy(k.p).setY(k.p.y + 0.5), { color: ["#ff8a1e", "#ffd23a", "#ffffff"], speed: 4, up: 2, dir: k.forward.multiplyScalar(-1), add: true });
+          }
+          this.gasFrom = -1;
+          this.onEvent({ type: "go", rocket });
           window.setTimeout(() => this.setLamps(0), 1200);
         }
       }

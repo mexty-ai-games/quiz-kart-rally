@@ -402,7 +402,7 @@ export const Hud: React.FC<{
           </Btn>
         </div>
       )}
-      {touch && !hud.spectating && !pre && (
+      {touch && !hud.spectating && hud.phase !== "intro" && (
         <div className="qk-pad">
           <div className="qk-padl">
             <Hold className="left" label={t(ui.left)} on={(b) => (input.touch.left = b)}>
@@ -418,6 +418,9 @@ export const Hud: React.FC<{
             </Hold>
             <Hold className="drift" label={t(ui.drift)} on={(b) => (input.touch.drift = b)}>
               {t(ui.drift)}
+            </Hold>
+            <Hold className="gas" label={ui.gas ? t(ui.gas) : "Gas"} on={(b) => (input.touch.gas = b)}>
+              {ui.gas ? t(ui.gas) : "▲"}
             </Hold>
           </div>
         </div>

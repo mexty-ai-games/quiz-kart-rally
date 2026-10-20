@@ -667,6 +667,19 @@
   height: clamp(70px, 18vw, 92px);
   background: rgba(79, 195, 255, 0.45);
 }
+/* the gas pedal: the biggest button, under the right thumb */
+.qk-touch.gas {
+  border-radius: 26px;
+  width: clamp(78px, 19vw, 100px);
+  height: clamp(92px, 24vw, 124px);
+  font-size: 30px;
+  background: linear-gradient(180deg, rgba(255, 168, 60, 0.7), rgba(255, 112, 24, 0.7));
+  border-color: rgba(255, 236, 200, 0.9);
+}
+.qk-touch.gas:active {
+  background: linear-gradient(180deg, rgba(255, 196, 90, 0.92), rgba(255, 130, 30, 0.92));
+  transform: scale(0.96);
+}
 
 /* pause */
 .qk-opts {
@@ -841,8 +854,10 @@
   }
 }
 @media (max-height: 520px) and (orientation: landscape) {
+  /* between the bonus box (left) and the lap / time / pause pills (right) */
   .qk-question {
-    width: min(460px, calc(100% - 330px));
+    left: calc(50% - 97px);
+    width: min(460px, calc(100% - 386px));
     padding: 4px 10px 6px;
   }
   .qk-prompt {
@@ -1810,5 +1825,41 @@
   }
   .qk-share .qk-note {
     display: none;
+  }
+}
+
+/* narrow portrait phones: five touch buttons in one row */
+@media (max-width: 520px) and (orientation: portrait) {
+  .qk-hud.touch .qk-question {
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 118px);
+  }
+  .qk-pad {
+    padding: 0 max(8px, env(safe-area-inset-left));
+  }
+  .qk-padl,
+  .qk-padr {
+    gap: 7px;
+  }
+  .qk-touch {
+    width: 60px;
+    height: 60px;
+    font-size: 22px;
+    border-width: 3px;
+  }
+  .qk-touch.brake,
+  .qk-touch.drift {
+    width: 60px;
+    height: 54px;
+    font-size: 13px;
+    border-radius: 18px;
+  }
+  .qk-touch.drift {
+    height: 64px;
+  }
+  .qk-touch.gas {
+    width: 74px;
+    height: 96px;
+    font-size: 22px;
+    border-radius: 22px;
   }
 }

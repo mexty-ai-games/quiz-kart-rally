@@ -1,5 +1,5 @@
 /**
- * Arcade kart physics: auto-throttle friendly, forgiving grip, drift with mini-turbos,
+ * Arcade kart physics: forgiving grip, drift with mini-turbos,
  * jumps with tricks (tap drift in the air, boost on landing), turbo/nova/spin-out states,
  * grass slow-down and a soft barrier. The ground (banked corners, hills, ramps) comes from the
  * track samples, so karts follow it without a physics engine.
@@ -67,6 +67,8 @@ export class Kart {
   drifting = false;
   driftDir = 0;
   driftT = 0;
+  /** 0 → 1 over the first 0.3 s of a drift */
+  driftIn = 0;
   private prevDrift = false;
   private prevRamp = 0;
   private prevRampSlope = 0;
@@ -186,10 +188,12 @@ export class Kart {
       this.drifting = true;
       this.driftDir = Math.sign(this.steerSm);
       this.driftT = 0;
-      this.hop = 0.35;
+      this.driftIn = 0;
+      this.hop = 0.25;
       ev.driftStart = true;
     }
     if (this.drifting) {
+      this.driftIn = Math.min(1, this.driftIn + dt / 0.3);
       if (!this.air) this.driftT += dt * (0.6 + (0.6 * Math.abs(this.steerSm + this.driftDir)) / 2);
       if (!inp.drift || !canDrift) {
         this.drifting = false;
@@ -208,8 +212,13 @@ export class Kart {
     const sp = Math.max(0, this.speed);
     let turn = THREE.MathUtils.lerp(2.3, 1.4, Math.min(1, sp / VMAX)) * Math.min(1, sp / 4);
     let steer = this.steerSm;
-    if (this.drifting) steer = this.driftDir * (0.75 + 0.45 * this.steerSm * this.driftDir);
-    if (this.drifting) turn *= 1.25;
+    // drifting: a gentle arc around a base angle; steer into the drift to tighten, away to widen.
+    // It blends in over 0.3 s so the kart does not snap sideways.
+    if (this.drifting) {
+      const arc = this.driftDir * (0.52 + 0.4 * this.steerSm * this.driftDir);
+      steer += (arc - steer) * this.driftIn;
+      turn *= 1 + 0.1 * this.driftIn;
+    }
     if (this.air) turn *= 0.45;
     this.yaw -= steer * turn * dt * (this.speed < 0 ? -1 : 1);
 
@@ -222,13 +231,13 @@ export class Kart {
       if (inp.brake > 0.05) acc -= this.speed > 0.5 ? 22 * inp.brake : 7 * inp.brake;
       if (inp.throttle < 0.05 && inp.brake < 0.05) acc -= Math.sign(this.speed) * 3;
       acc -= 9.8 * T.samples[L.i].slope * 0.6;
-      if (this.drifting) acc -= 1.5;
+      if (this.drifting) acc -= 0.8;
     } else if (this.boostT > 0 && this.speed < vmax) acc += 8;
     this.speed = Math.max(-8, this.speed + acc * dt);
 
     // lateral slide (drift lets the kart slide, grip pulls it back)
-    if (this.drifting && !this.air) this.vlat += -this.driftDir * sp * 0.55 * dt;
-    this.vlat *= Math.exp(-dt * (this.drifting ? 2.2 : this.air ? 0.6 : 7));
+    if (this.drifting && !this.air) this.vlat += -this.driftDir * sp * 0.3 * this.driftIn * dt;
+    this.vlat *= Math.exp(-dt * (this.drifting ? 3.2 : this.air ? 0.6 : 7));
 
     const f = this.forward;
     const r = new THREE.Vector3(-f.z, 0, f.x);

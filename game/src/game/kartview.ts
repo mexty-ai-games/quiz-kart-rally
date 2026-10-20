@@ -194,6 +194,7 @@ export class KartView {
   }
 
   /** Copies the kart's state onto the model. `boostLevel`: 0 none, 1 boost, 2 big (mini-turbo / trick). */
+  private driftAng = 0;
   update(k: Kart, t: number, dt: number, camPos: THREE.Vector3) {
     this.root.position.copy(k.p);
     this.root.rotation.y = k.yaw;
@@ -203,9 +204,12 @@ export class KartView {
     else this.trickRoll += (0 - this.trickRoll) * Math.min(1, dt * 20);
     const sq = k.squash;
     this.body.scale.set(1 + sq * 0.25, 1 - sq * 0.45, 1 + sq * 0.15);
-    this.body.rotation.set(0, k.spinYaw + (k.drifting ? k.driftDir * -0.34 : 0), 0);
-    this.body.rotation.z = (k.drifting ? k.driftDir * 0.06 : -k.steerSm * 0.045 * Math.min(1, k.speed / 15)) + this.trickRoll;
-    this.body.position.y = Math.sin(Math.min(1, k.hop / 0.35) * Math.PI) * 0.35;
+    // the drift angle eases in and out instead of snapping
+    const angWant = k.drifting ? k.driftDir * -0.24 : 0;
+    this.driftAng += (angWant - this.driftAng) * Math.min(1, dt * 7);
+    this.body.rotation.set(0, k.spinYaw + this.driftAng, 0);
+    this.body.rotation.z = (k.drifting ? k.driftDir * 0.045 : -k.steerSm * 0.045 * Math.min(1, k.speed / 15)) + this.trickRoll;
+    this.body.position.y = Math.sin(Math.min(1, k.hop / 0.25) * Math.PI) * 0.22;
     this.wheelsF.forEach((wh) => {
       wh.rotation.x = k.wheelSpin;
       wh.rotation.y = -k.steerSm * 0.45;
