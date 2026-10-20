@@ -1863,3 +1863,87 @@
     border-radius: 22px;
   }
 }
+
+/* --- touch screens: the question is a slim one-line strip in the sky, so it never covers the road
+   or the answer gates (the gantry screen and the signs over the boxes show the answers too) */
+.qk-hud.touch .qk-question {
+  top: max(8px, env(safe-area-inset-top));
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px 6px;
+  border-width: 3px;
+  border-radius: 16px;
+  background: rgba(36, 28, 84, 0.72);
+  pointer-events: none;
+  overflow: hidden;
+}
+.qk-hud.touch .qk-qlabel {
+  display: none;
+}
+.qk-hud.touch .qk-prompt {
+  flex: 0 1 auto;
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.qk-hud.touch .qk-answers {
+  flex: 1 1 auto;
+  margin-top: 0;
+  gap: 5px;
+  min-width: 0;
+}
+.qk-hud.touch .qk-ans {
+  font-size: 16px;
+  border-width: 2px;
+  border-radius: 10px;
+  padding: 1px 4px;
+  min-width: 0;
+}
+/* the distance bar becomes a thin line along the bottom edge */
+.qk-hud.touch .qk-dist {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 2px;
+  height: 3px;
+  margin: 0;
+}
+@media (orientation: landscape) {
+  /* between the bonus box and the lap / time / pause pills */
+  .qk-hud.touch .qk-question {
+    left: calc(50% - 97px);
+    width: min(470px, calc(100% - 386px));
+  }
+}
+@media (orientation: portrait) {
+  /* under the lap / time / pause row, beside the bonus box */
+  .qk-hud.touch .qk-question {
+    left: calc(max(10px, env(safe-area-inset-left)) + 98px);
+    right: max(10px, env(safe-area-inset-right));
+    top: calc(max(8px, env(safe-area-inset-top)) + 56px);
+    width: auto;
+    transform: none;
+    animation: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 6px;
+  }
+  .qk-hud.touch .qk-prompt {
+    max-width: 100%;
+  }
+  .qk-hud.touch .qk-answers {
+    flex-basis: 100%;
+  }
+  .qk-hud.touch .qk-pos {
+    top: 150px;
+  }
+  /* the answer gates come up exactly where the minimap would sit */
+  .qk-hud.touch .qk-map {
+    display: none;
+  }
+}
