@@ -1,6 +1,6 @@
 /** React screens and HUD for Quiz Kart Rally (all texts come from the props). */
 import React, { useEffect, useRef } from "react";
-import type { HudState, Standing } from "./engine";
+import type { HudState, Standing, Tier } from "./engine";
 import type { Input } from "./input";
 import { BONUS_COLOR, BONUS_ICON, BonusId } from "./items";
 import type { Cup, LocalizedText, UiText, BonusTexts, RacerText } from "./types";
@@ -36,14 +36,14 @@ export interface AnswerLog {
 }
 
 export const fmt = (ms: number) => {
-  if (!isFinite(ms) || ms < 0) return "--:--.-";
+  if (!isFinite(ms) || ms <= 0) return "--:--.-";
   const m = Math.floor(ms / 60000);
   const s = Math.floor((ms % 60000) / 1000);
   const d = Math.floor((ms % 1000) / 100);
   return `${m}:${s < 10 ? "0" : ""}${s}.${d}`;
 };
 
-export const Btn: React.FC<{ onClick?: () => void; kind?: "go" | "alt" | "ghost"; disabled?: boolean; children: React.ReactNode; className?: string; ariaLabel?: string }> = ({ onClick, kind, disabled, children, className, ariaLabel }) => (
+export const Btn: React.FC<{ onClick?: () => void; kind?: "go" | "alt" | "ghost" | "online"; disabled?: boolean; children: React.ReactNode; className?: string; ariaLabel?: string }> = ({ onClick, kind, disabled, children, className, ariaLabel }) => (
   <button className={`qk-btn ${kind ? "qk-" + kind : ""} ${className ?? ""}`} onClick={onClick} disabled={disabled} aria-label={ariaLabel}>
     {children}
   </button>
@@ -55,7 +55,7 @@ export const BonusIcon: React.FC<{ id: BonusId; size?: number }> = ({ id, size =
   </svg>
 );
 
-const Trophy: React.FC<{ pos: number; size?: number }> = ({ pos, size = 26 }) => {
+export const Trophy: React.FC<{ pos: number; size?: number }> = ({ pos, size = 26 }) => {
   const c = pos === 1 ? "#ffcf3a" : pos === 2 ? "#d5d9e6" : pos === 3 ? "#e09a5c" : null;
   if (!c) return null;
   return (
@@ -65,6 +65,10 @@ const Trophy: React.FC<{ pos: number; size?: number }> = ({ pos, size = 26 }) =>
   );
 };
 
+export const Helmet: React.FC<{ color: string; size?: number }> = ({ color, size = 40 }) => (
+  <span className="qk-helmet" style={{ ["--c" as any]: color, width: size, height: size }} aria-hidden="true" />
+);
+
 export function ordinal(t: T, ui: UiText, pos: number) {
   const o = ui.ordinals && ui.ordinals[pos - 1];
   return o ? t(o) : String(pos);
@@ -72,7 +76,7 @@ export function ordinal(t: T, ui: UiText, pos: number) {
 
 // ------------------------------------------------------------------ screens
 export const Loading: React.FC<{ p: number; label: string; title: string }> = ({ p, label, title }) => (
-  <div className="qk-center">
+  <div className="qk-center qk-loadbg">
     <div className="qk-card qk-loading">
       <h1 className="qk-logo">{title}</h1>
       <div className="qk-bar">
@@ -83,16 +87,23 @@ export const Loading: React.FC<{ p: number; label: string; title: string }> = ({
   </div>
 );
 
-export const Title: React.FC<{ t: T; title: LocalizedText; subtitle: LocalizedText; ui: UiText; onPlay: () => void; onHow: () => void }> = ({ t, title, subtitle, ui, onPlay, onHow }) => (
+export const Title: React.FC<{ t: T; title: LocalizedText; subtitle: LocalizedText; ui: UiText; onSolo: () => void; onOnline: () => void; onHow: () => void }> = ({ t, title, subtitle, ui, onSolo, onOnline, onHow }) => (
   <div className="qk-center qk-title">
     <div className="qk-titlebox">
       <h1 className="qk-logo big">{t(title)}</h1>
       <div className="qk-sub">{t(subtitle)}</div>
+      <div className="qk-modes">
+        <button className="qk-mode solo" onClick={onSolo}>
+          <span className="ic">🏁</span>
+          <span className="lb">{t(ui.playSolo)}</span>
+        </button>
+        <button className="qk-mode online" onClick={onOnline}>
+          <span className="ic">🌐</span>
+          <span className="lb">{t(ui.playOnline)}</span>
+        </button>
+      </div>
       <div className="qk-row">
-        <Btn kind="go" onClick={onPlay}>
-          {t(ui.play)}
-        </Btn>
-        <Btn kind="alt" onClick={onHow}>
+        <Btn kind="ghost" onClick={onHow}>
           {t(ui.howToPlay)}
         </Btn>
       </div>
@@ -172,6 +183,17 @@ export const CupSelect: React.FC<{ t: T; ui: UiText; cups: Cup[]; prog: Progress
   </div>
 );
 
+export const RacerPicker: React.FC<{ t: T; racers: RacerText[]; sel: number; onSel: (i: number) => void }> = ({ t, racers, sel, onSel }) => (
+  <div className="qk-racers" role="radiogroup">
+    {racers.map((r, i) => (
+      <button key={i} role="radio" aria-checked={sel === i} className={`qk-racer ${sel === i ? "sel" : ""}`} onClick={() => onSel(i)} style={{ ["--c" as any]: r.color }}>
+        <Helmet color={r.color} size={44} />
+        <span>{t(r.name)}</span>
+      </button>
+    ))}
+  </div>
+);
+
 export const RacerSelect: React.FC<{ t: T; ui: UiText; cup: Cup; racers: RacerText[]; sel: number; onSel: (i: number) => void; onStart: () => void; onBack: () => void }> = ({ t, ui, cup, racers, sel, onSel, onStart, onBack }) => (
   <div className="qk-center qk-bottom">
     <div className="qk-card wide">
@@ -183,14 +205,7 @@ export const RacerSelect: React.FC<{ t: T; ui: UiText; cup: Cup; racers: RacerTe
         </span>
       </div>
       <h3>{t(ui.chooseRacer)}</h3>
-      <div className="qk-racers" role="radiogroup">
-        {racers.map((r, i) => (
-          <button key={i} role="radio" aria-checked={sel === i} className={`qk-racer ${sel === i ? "sel" : ""}`} onClick={() => onSel(i)} style={{ ["--c" as any]: r.color }}>
-            <span className="qk-helmet" />
-            <span>{t(r.name)}</span>
-          </button>
-        ))}
-      </div>
+      <RacerPicker t={t} racers={racers} sel={sel} onSel={onSel} />
       <div className="qk-row end">
         <Btn kind="alt" onClick={onBack}>
           {t(ui.back)}
@@ -214,7 +229,7 @@ export const MiniMap: React.FC<{ outline: { pts: [number, number][]; min: [numbe
       H = c.height;
     const [x0, z0] = outline.min;
     const [x1, z1] = outline.max;
-    const sc = Math.min((W - 16) / Math.max(1, x1 - x0), (H - 16) / Math.max(1, z1 - z0));
+    const sc = Math.min((W - 18) / Math.max(1, x1 - x0), (H - 18) / Math.max(1, z1 - z0));
     const ox = (W - (x1 - x0) * sc) / 2,
       oz = (H - (z1 - z0) * sc) / 2;
     const P = (x: number, z: number): [number, number] => [ox + (x - x0) * sc, oz + (z - z0) * sc];
@@ -227,11 +242,11 @@ export const MiniMap: React.FC<{ outline: { pts: [number, number][]; min: [numbe
       else ctx.moveTo(a, b);
     });
     ctx.closePath();
-    ctx.strokeStyle = "rgba(20,14,50,0.75)";
-    ctx.lineWidth = 9;
+    ctx.strokeStyle = "rgba(20,14,50,0.8)";
+    ctx.lineWidth = 11;
     ctx.stroke();
     ctx.strokeStyle = "#e9e4ff";
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     ctx.stroke();
     hud.map.rivals.forEach((r) => {
       const [a, b] = P(r.x, r.z);
@@ -239,20 +254,20 @@ export const MiniMap: React.FC<{ outline: { pts: [number, number][]; min: [numbe
       ctx.strokeStyle = "#20183f";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(a, b, 5, 0, Math.PI * 2);
+      ctx.arc(a, b, 5.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     });
     const [px, pz] = P(hud.map.player[0], hud.map.player[1]);
     ctx.fillStyle = "#ff3d6e";
     ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(px, pz, 7, 0, Math.PI * 2);
+    ctx.arc(px, pz, 8, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   });
-  return <canvas ref={ref} className="qk-map" width={150} height={150} aria-hidden="true" />;
+  return <canvas ref={ref} className="qk-map" width={160} height={160} aria-hidden="true" />;
 };
 
 const Hold: React.FC<{ className: string; label: string; on: (b: boolean) => void; children?: React.ReactNode }> = ({ className, label, on, children }) => (
@@ -281,44 +296,67 @@ export const Hud: React.FC<{
   flash: Flash | null;
   outline: { pts: [number, number][]; min: [number, number]; max: [number, number] } | null;
   bonuses: BonusTexts;
+  cupName: string;
   onPause: () => void;
   onBonus: () => void;
-}> = ({ t, ui, hud, touch, input, flash, outline, bonuses, onPause, onBonus }) => {
+  onSpectate: () => void;
+}> = ({ t, ui, hud, touch, input, flash, outline, bonuses, cupName, onPause, onBonus, onSpectate }) => {
   const q = hud.question;
   const bId = hud.rolling ? hud.rollFace : hud.bonus;
   const bName = hud.bonus && !hud.rolling ? t(((bonuses as any)[hud.bonus] || {}).name) : "";
+  const pre = hud.phase === "intro" || hud.phase === "countdown";
+  const showPos = !hud.spectating && hud.pos > 0 && hud.phase !== "intro";
   return (
-    <div className={`qk-hud ${touch ? "touch" : ""}`}>
-      <div className="qk-tl">
-        <div className="qk-pos">
-          <span className="big">{ordinal(t, ui, hud.pos)}</span>
-          <span className="of">/{hud.racers}</span>
+    <div className={`qk-hud ${touch ? "touch" : ""} ${hud.boost ? "boosting" : ""}`}>
+      {!hud.spectating && hud.phase !== "intro" && (
+        <div className="qk-tl">
+          <button className={`qk-bonus ${hud.rolling ? "rolling" : ""} ${hud.bonus ? "ready" : ""}`} onClick={onBonus} aria-label={`${t(ui.useBonus)} ${bName}`} disabled={!hud.bonus || hud.rolling}>
+            <span className="qk-bonusin">{bId ? <BonusIcon id={bId} size={50} /> : <span className="qk-q">?</span>}</span>
+            {hud.bonus === "triple" && !hud.rolling && <span className="qk-charges">×{hud.charges}</span>}
+          </button>
+          <div className="qk-coins" aria-label={`${t(ui.coins)} ${hud.coins}`}>
+            <span className="qk-coin" /> {hud.coins}
+          </div>
         </div>
-        <div className="qk-lap">
-          {t(ui.lap)} {hud.lap}/{hud.laps}
+      )}
+      <div className="qk-tr">
+        <div className="qk-laps">
+          <span className="lb">{t(ui.lap)}</span>
+          <span className="v">
+            {hud.lap}
+            <small>/{hud.laps}</small>
+          </span>
         </div>
         <div className="qk-time">{fmt(hud.timeMs)}</div>
-      </div>
-      <div className="qk-tr">
-        <button className={`qk-bonus ${hud.rolling ? "rolling" : ""} ${hud.bonus ? "ready" : ""}`} onClick={onBonus} aria-label={`${t(ui.useBonus)} ${bName}`} disabled={!hud.bonus || hud.rolling}>
-          {bId ? <BonusIcon id={bId} size={44} /> : <span className="qk-q">?</span>}
-          {hud.bonus === "triple" && !hud.rolling && <span className="qk-charges">×{hud.charges}</span>}
-        </button>
-        <div className="qk-coins" aria-label={`${t(ui.coins)} ${hud.coins}`}>
-          <span className="qk-coin" /> {hud.coins}
-        </div>
         <button className="qk-pausebtn" onClick={onPause} aria-label={t(ui.paused)}>
           <span />
           <span />
         </button>
       </div>
+      {hud.order.length > 1 && hud.phase !== "intro" && (
+        <ol className="qk-order" aria-hidden="true">
+          {hud.order.map((r, i) => (
+            <li key={r.id} className={r.me ? "me" : ""}>
+              <span className="n">{i + 1}</span>
+              <span className="d" style={{ background: r.color }} />
+              <span className="nm">{r.me ? t(ui.you) : r.name}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {showPos && (
+        <div className={`qk-pos p${Math.min(hud.pos, 4)}`} aria-label={ordinal(t, ui, hud.pos)}>
+          <span className="big">{ordinal(t, ui, hud.pos)}</span>
+          <span className="of">/{hud.racers}</span>
+        </div>
+      )}
       {q && (
         <div className="qk-question" role="status" aria-live="polite">
           <div className="qk-qlabel">{t(ui.question)}</div>
           <div className="qk-prompt">{q.prompt}</div>
           <div className="qk-answers">
             {q.lanes.map((l, i) => (
-              <div key={i} className="qk-ans" style={{ borderColor: l.color, background: l.color + "33" }}>
+              <div key={i} className="qk-ans" style={{ borderColor: l.color, background: l.color + "40" }}>
                 {l.text}
               </div>
             ))}
@@ -328,7 +366,17 @@ export const Hud: React.FC<{
           </div>
         </div>
       )}
-      {hud.phase === "countdown" && hud.count > 0 && hud.count < 4 && <div className="qk-count">{hud.count}</div>}
+      {hud.phase === "intro" && (
+        <div className="qk-intro">
+          <div className="cup">{cupName}</div>
+          <div className="ready">{t(ui.getReady)}</div>
+        </div>
+      )}
+      {hud.phase === "countdown" && hud.count > 0 && hud.count < 4 && (
+        <div key={hud.count} className={`qk-count c${hud.count}`}>
+          {hud.count}
+        </div>
+      )}
       {flash && (
         <div key={flash.id} className={`qk-flash ${flash.kind}`}>
           <div className="main">{flash.main}</div>
@@ -340,8 +388,21 @@ export const Hud: React.FC<{
         {hud.nova && <span className="qk-tag nova">{t(((bonuses as any).nova || {}).name)}</span>}
         {hud.drift > 1 && <span className={`qk-tag drift d${hud.drift}`}>{t(ui.drift)}</span>}
       </div>
+      <div className="qk-speed" aria-hidden="true">
+        <b>{Math.round(hud.speed)}</b>
+        <small>km/h</small>
+      </div>
       <MiniMap outline={outline} hud={hud} />
-      {touch && (
+      {hud.spectating && (
+        <div className="qk-spectate">
+          <div className="t">{t(ui.watching)}</div>
+          <div className="s">{t(ui.nextRaceSoon)}</div>
+          <Btn kind="ghost" onClick={onSpectate}>
+            ⟳
+          </Btn>
+        </div>
+      )}
+      {touch && !hud.spectating && !pre && (
         <div className="qk-pad">
           <div className="qk-padl">
             <Hold className="left" label={t(ui.left)} on={(b) => (input.touch.left = b)}>
@@ -365,48 +426,63 @@ export const Hud: React.FC<{
   );
 };
 
-export const Pause: React.FC<{ t: T; ui: UiText; sound: boolean; setSound: (b: boolean) => void; quality: "low" | "high"; setQuality: (q: "low" | "high") => void; onResume: () => void; onRestart: () => void; onQuit: () => void }> = ({
-  t,
-  ui,
-  sound,
-  setSound,
-  quality,
-  setQuality,
-  onResume,
-  onRestart,
-  onQuit,
-}) => (
-  <div className="qk-center qk-dim">
-    <div className="qk-card">
-      <h2>{t(ui.paused)}</h2>
-      <div className="qk-opts">
-        <div className="qk-opt">
-          <span>{t(ui.sound)}</span>
-          <Btn kind="ghost" onClick={() => setSound(!sound)}>
-            {sound ? t(ui.on) : t(ui.off)}
+const TIER_OPTS: ("auto" | Tier)[] = ["auto", "low", "medium", "high", "ultra"];
+
+export const Pause: React.FC<{
+  t: T;
+  ui: UiText;
+  sound: boolean;
+  setSound: (b: boolean) => void;
+  tier: "auto" | Tier;
+  tierNow: Tier;
+  setTier: (q: "auto" | Tier) => void;
+  online: boolean;
+  onResume: () => void;
+  onRestart: () => void;
+  onQuit: () => void;
+}> = ({ t, ui, sound, setSound, tier, tierNow, setTier, online, onResume, onRestart, onQuit }) => {
+  const label = (q: "auto" | Tier) => (q === "auto" ? t(ui.qualityAuto) : q === "low" ? t(ui.qualityLow) : q === "medium" ? t(ui.qualityMedium) : q === "high" ? t(ui.qualityHigh) : t(ui.qualityUltra));
+  return (
+    <div className="qk-center qk-dim">
+      <div className="qk-card">
+        <h2>{t(ui.paused)}</h2>
+        <div className="qk-opts">
+          <div className="qk-opt">
+            <span>{t(ui.sound)}</span>
+            <Btn kind="ghost" onClick={() => setSound(!sound)}>
+              {sound ? t(ui.on) : t(ui.off)}
+            </Btn>
+          </div>
+          <div className="qk-opt col">
+            <span>
+              {t(ui.quality)} <small>({label(tierNow)})</small>
+            </span>
+            <div className="qk-seg">
+              {TIER_OPTS.map((q) => (
+                <button key={q} className={tier === q ? "on" : ""} onClick={() => setTier(q)}>
+                  {label(q)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="qk-row">
+          <Btn kind="go" onClick={onResume}>
+            {t(ui.resume)}
+          </Btn>
+          {!online && (
+            <Btn kind="alt" onClick={onRestart}>
+              {t(ui.restart)}
+            </Btn>
+          )}
+          <Btn kind="alt" onClick={onQuit}>
+            {online ? t(ui.leave) : t(ui.quit)}
           </Btn>
         </div>
-        <div className="qk-opt">
-          <span>{t(ui.quality)}</span>
-          <Btn kind="ghost" onClick={() => setQuality(quality === "high" ? "low" : "high")}>
-            {quality === "high" ? t(ui.qualityHigh) : t(ui.qualityLow)}
-          </Btn>
-        </div>
-      </div>
-      <div className="qk-row">
-        <Btn kind="go" onClick={onResume}>
-          {t(ui.resume)}
-        </Btn>
-        <Btn kind="alt" onClick={onRestart}>
-          {t(ui.restart)}
-        </Btn>
-        <Btn kind="alt" onClick={onQuit}>
-          {t(ui.quit)}
-        </Btn>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const Results: React.FC<{
   t: T;
@@ -420,13 +496,14 @@ export const Results: React.FC<{
   standings: Standing[];
   answers: AnswerLog[];
   board: React.ReactNode;
+  online: boolean;
   hasNext: boolean;
   nextUnlocked: boolean;
   onRetry: () => void;
   onNext: () => void;
   onCups: () => void;
-}> = ({ t, ui, pos, timeMs, correct, asked, coins, record, standings, answers, board, hasNext, nextUnlocked, onRetry, onNext, onCups }) => (
-  <div className="qk-center qk-dim">
+}> = ({ t, ui, pos, timeMs, correct, asked, coins, record, standings, answers, board, online, hasNext, nextUnlocked, onRetry, onNext, onCups }) => (
+  <div className="qk-center qk-results">
     <div className="qk-card wide qk-scroll">
       <div className="qk-reshead">
         <Trophy pos={pos} size={56} />
@@ -455,8 +532,9 @@ export const Results: React.FC<{
           <ol className="qk-standings">
             {standings.map((s, i) => (
               <li key={i} className={s.player ? "me" : ""}>
+                <span className="rk">{i + 1}</span>
                 <span className="dot" style={{ background: s.color }} />
-                <span className="n">{s.name}</span>
+                <span className="n">{s.player ? `${s.name} (${t(ui.you)})` : s.name}</span>
                 <span className="tm">{fmt(s.timeMs)}</span>
               </li>
             ))}
@@ -477,16 +555,24 @@ export const Results: React.FC<{
         </div>
       </div>
       <div className="qk-row end">
-        <Btn kind="alt" onClick={onCups}>
-          {t(ui.chooseCup)}
-        </Btn>
-        <Btn kind={hasNext && nextUnlocked ? "alt" : "go"} onClick={onRetry}>
-          {t(ui.retry)}
-        </Btn>
-        {hasNext && nextUnlocked && (
-          <Btn kind="go" onClick={onNext}>
-            {t(ui.nextCup)}
+        {online ? (
+          <Btn kind="go" onClick={onCups}>
+            {t(ui.backToLobby)}
           </Btn>
+        ) : (
+          <>
+            <Btn kind="alt" onClick={onCups}>
+              {t(ui.chooseCup)}
+            </Btn>
+            <Btn kind={hasNext && nextUnlocked ? "alt" : "go"} onClick={onRetry}>
+              {t(ui.retry)}
+            </Btn>
+            {hasNext && nextUnlocked && (
+              <Btn kind="go" onClick={onNext}>
+                {t(ui.nextCup)}
+              </Btn>
+            )}
+          </>
         )}
       </div>
     </div>

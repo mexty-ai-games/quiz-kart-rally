@@ -15,9 +15,10 @@ varying float vAlpha;
 uniform float scale;
 void main() {
   vColor = color;
-  vAlpha = alpha;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = size * scale / max(0.5, -mv.z);
+  // particles right in front of the lens fade out instead of becoming big blurry blobs
+  vAlpha = alpha * smoothstep(1.2, 4.5, -mv.z);
+  gl_PointSize = min(size * scale / max(0.5, -mv.z), 96.0);
   gl_Position = projectionMatrix * mv;
 }`;
 
@@ -28,8 +29,8 @@ void main() {
   vec2 d = gl_PointCoord - 0.5;
   float r = length(d);
   if (r > 0.5) discard;
-  float a = smoothstep(0.5, 0.15, r) * vAlpha;
-  gl_FragColor = vec4(vColor, a);
+  float a = smoothstep(0.5, 0.0, r) * vAlpha;
+  gl_FragColor = vec4(vColor * (1.0 + (1.0 - r * 2.0) * GLOW), a);
 }`;
 
 interface P {
@@ -49,7 +50,7 @@ interface P {
   b: number;
 }
 
-export class Fx {
+class Particles {
   points: THREE.Points;
   private geo = new THREE.BufferGeometry();
   private pos = new Float32Array(MAX * 3);
@@ -61,7 +62,7 @@ export class Fx {
   private c = new THREE.Color();
   budget = 1;
 
-  constructor() {
+  constructor(additive: boolean) {
     this.geo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute("color", new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute("size", new THREE.BufferAttribute(this.siz, 1).setUsage(THREE.DynamicDrawUsage));
@@ -70,13 +71,14 @@ export class Fx {
       vertexShader: vert,
       fragmentShader: frag,
       uniforms: { scale: { value: 300 } },
+      defines: { GLOW: additive ? "1.6" : "0.0" },
       transparent: true,
       depthWrite: false,
-      blending: THREE.NormalBlending,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     this.points = new THREE.Points(this.geo, this.mat);
     this.points.frustumCulled = false;
-    this.points.renderOrder = 4;
+    this.points.renderOrder = additive ? 6 : 4;
   }
 
   setViewport(h: number) {
@@ -160,5 +162,37 @@ export class Fx {
   dispose() {
     this.geo.dispose();
     this.mat.dispose();
+  }
+}
+
+export type EmitOpts = { color: string | string[]; speed?: number; up?: number; spread?: number; size?: number; life?: number; grav?: number; drag?: number; dir?: THREE.Vector3; add?: boolean };
+
+/** Two pooled layers: normal (dust, confetti, smoke) and additive (sparks, flames, glints). */
+export class Fx {
+  private normal = new Particles(false);
+  private glow = new Particles(true);
+  objects: THREE.Object3D[] = [this.normal.points, this.glow.points];
+  set budget(b: number) {
+    this.normal.budget = b;
+    this.glow.budget = b;
+  }
+  setViewport(h: number) {
+    this.normal.setViewport(h);
+    this.glow.setViewport(h);
+  }
+  emit(n: number, at: THREE.Vector3, o: EmitOpts) {
+    (o.add ? this.glow : this.normal).emit(n, at, o);
+  }
+  update(dt: number) {
+    this.normal.update(dt);
+    this.glow.update(dt);
+  }
+  clear() {
+    this.normal.clear();
+    this.glow.clear();
+  }
+  dispose() {
+    this.normal.dispose();
+    this.glow.dispose();
   }
 }

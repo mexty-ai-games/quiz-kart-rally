@@ -19,6 +19,7 @@ export class Driver {
   wobbleT = Math.random() * 10;
   target: AiTarget | null = null;
   useItemIn = -1;
+  private trickRoll = -1;
 
   constructor(public kart: Kart, public skill: number) {
     this.lineOff = (Math.random() * 2 - 1) * 0.35;
@@ -66,6 +67,12 @@ export class Driver {
       }
     }
     const brake = k.speed > vt + 1.5 ? 1 : 0;
-    return { throttle: brake ? 0 : 1, brake, steer, drift: false };
+    // tricks off jumps: skilled drivers usually land them
+    let drift = false;
+    if (k.air) {
+      if (this.trickRoll < 0) this.trickRoll = Math.random();
+      drift = !k.tricked && k.airT > 0.08 && k.airT < 0.2 && this.trickRoll < 0.35 + this.skill * 0.55;
+    } else this.trickRoll = -1;
+    return { throttle: brake ? 0 : 1, brake, steer, drift };
   }
 }

@@ -37,6 +37,7 @@ CUPS = [
         "mood": "day",
         "ground": "#7fbf5a",
         "track": "c1",
+        "theme": "meadow",
         "boosts": [0.3, 0.7],
         "qs": [
             ("8 + 7", [15, 14, 16]),
@@ -60,6 +61,7 @@ CUPS = [
         "mood": "morning",
         "ground": "#9fb85c",
         "track": "c2",
+        "theme": "hills",
         "boosts": [0.38, 0.78],
         "qs": [
             ("3 × 4", [12, 7, 16]),
@@ -83,6 +85,7 @@ CUPS = [
         "mood": "sunset",
         "ground": "#d8b878",
         "track": "c3",
+        "theme": "desert",
         "boosts": [0.25, 0.58],
         "qs": [
             ("12 ÷ 3", [4, 9, 36]),
@@ -106,6 +109,7 @@ CUPS = [
         "mood": "night",
         "ground": "#3f6347",
         "track": "c4",
+        "theme": "night",
         "boosts": [0.2, 0.52, 0.8],
         "qs": [
             ("2 + 3 × 4", [14, 20, 24], L("× first: 3 × 4 = 12, then 2 + 12 = 14", "× d'abord : 3 × 4 = 12, puis 2 + 12 = 14")),
@@ -126,6 +130,8 @@ CUPS = [
 
 UI = {
     "play": L("Play", "Jouer"),
+    "playSolo": L("Solo race", "Course solo"),
+    "playOnline": L("Race online", "Course en ligne"),
     "howToPlay": L("How to play", "Comment jouer"),
     "howSteps": [
         L("Your kart drives by itself: you steer.", "Ton kart avance tout seul : tu tournes le volant."),
@@ -133,6 +139,8 @@ UI = {
         L("Drive through the box with the right answer to win a random bonus.", "Passe dans la boîte de la bonne réponse pour gagner un bonus surprise."),
         L("A wrong box makes your kart spin and slow down. Try again on the next lap!", "Une mauvaise boîte fait tourner ton kart et le ralentit. Réessaie au tour suivant !"),
         L("Collect coins to go a little faster. Finish in the top 3 to win a trophy!", "Ramasse des pièces pour aller un peu plus vite. Termine dans les 3 premiers pour gagner une coupe !"),
+        L("On a jump ramp, tap Drift while you fly to do a trick: you get a boost when you land.", "Sur un tremplin, appuie sur Dérapage pendant le saut pour faire une figure : tu gagnes un boost à l'atterrissage."),
+        L("Race online: join a quick race, type a friend's code, or create a race and share its code.", "En ligne : rejoins une course rapide, tape le code d'un ami, ou crée une course et partage son code."),
     ],
     "controlsKeys": L(
         "← → or A D: steer · ↓ or S: brake · Shift: drift (hold in a turn, let go for a boost) · Space or E: use your bonus · Esc: pause",
@@ -151,6 +159,7 @@ UI = {
     "laps": L("laps", "tours"),
     "chooseRacer": L("Choose your racer", "Choisis ton pilote"),
     "start": L("Start!", "C'est parti !"),
+    "getReady": L("Get ready!", "Prépare-toi !"),
     "lap": L("Lap", "Tour"),
     "finalLap": L("Final lap!", "Dernier tour !"),
     "go": L("GO!", "PARTEZ !"),
@@ -169,6 +178,7 @@ UI = {
     "shielded": L("Shield saved you!", "Le bouclier t'a protégé !"),
     "hitPeel": L("Slippery peel!", "Peau glissante !"),
     "hitNova": L("Bumped by a nova!", "Percuté par une nova !"),
+    "trick": L("Nice trick!", "Belle figure !"),
     "finish": L("Finish!", "Arrivée !"),
     "paused": L("Paused", "Pause"),
     "resume": L("Resume", "Reprendre"),
@@ -176,8 +186,11 @@ UI = {
     "quit": L("Quit race", "Quitter la course"),
     "sound": L("Sound", "Son"),
     "quality": L("Graphics", "Graphismes"),
+    "qualityAuto": L("Auto", "Auto"),
     "qualityLow": L("Fast", "Rapide"),
+    "qualityMedium": L("Balanced", "Équilibré"),
     "qualityHigh": L("Pretty", "Joli"),
+    "qualityUltra": L("Ultra", "Ultra"),
     "on": L("On", "Oui"),
     "off": L("Off", "Non"),
     "podium": L("On the podium!", "Sur le podium !"),
@@ -191,7 +204,41 @@ UI = {
     "familyBoard": L("Family best times", "Meilleurs temps de la famille"),
     "guestHint": L("Sign in on EdVerse to compare times with your family.", "Connecte-toi sur EdVerse pour comparer tes temps avec ta famille."),
     "boardEmpty": L("No times yet: be the first!", "Pas encore de temps : sois le premier !"),
-    "ordinals": [L("1st", "1er"), L("2nd", "2e"), L("3rd", "3e"), L("4th", "4e"), L("5th", "5e")],
+    "ordinals": [L("1st", "1er"), L("2nd", "2e"), L("3rd", "3e"), L("4th", "4e"), L("5th", "5e"), L("6th", "6e"), L("7th", "7e"), L("8th", "8e")],
+    "quickRace": L("Quick race", "Course rapide"),
+    "quickRaceHint": L("Jump into a race with other players", "Rejoins vite une course avec d'autres joueurs"),
+    "joinWithCode": L("Join with a code", "Rejoindre avec un code"),
+    "createRace": L("Create a race", "Créer une course"),
+    "publicRace": L("Public", "Publique"),
+    "privateRace": L("Private", "Privée"),
+    "publicHint": L("Anyone can find it in the list of open races.", "Tout le monde peut la trouver dans la liste des courses."),
+    "privateHint": L("Friends join with your code or the QR code.", "Tes amis rejoignent avec ton code ou le QR code."),
+    "openRaces": L("Open races", "Courses ouvertes"),
+    "noOpenRaces": L("No open race right now: start a quick race!", "Aucune course ouverte : lance une course rapide !"),
+    "join": L("Join", "Rejoindre"),
+    "watch": L("Watch", "Regarder"),
+    "waiting": L("Waiting", "En attente"),
+    "racing": L("Racing", "En course"),
+    "enterCode": L("Type the 5-letter race code", "Tape le code de la course (5 lettres)"),
+    "codeNotFound": L("No race with this code. Check the letters and try again.", "Aucune course avec ce code. Vérifie les lettres et réessaie."),
+    "lobbyFull": L("This race is full. Try another one!", "Cette course est complète. Essaie une autre !"),
+    "connecting": L("Connecting…", "Connexion…"),
+    "onlineUnavailable": L("Online races can't connect right now. Try a solo race!", "Les courses en ligne ne se connectent pas pour l'instant. Essaie une course solo !"),
+    "leave": L("Leave", "Quitter"),
+    "players": L("Players", "Joueurs"),
+    "you": L("you", "toi"),
+    "hostTag": L("host", "hôte"),
+    "aiTag": L("AI", "IA"),
+    "waitingForHost": L("Waiting for the host to start…", "On attend que l'hôte lance la course…"),
+    "startRace": L("Start the race!", "Lancer la course !"),
+    "startsIn": L("Race starts in", "Départ dans"),
+    "aiFill": L("Free spot", "Place libre"),
+    "shareCode": L("Friends type this code in \"Join with a code\".", "Tes amis tapent ce code dans « Rejoindre avec un code »."),
+    "scanToJoin": L("Scan to join", "Scanne pour rejoindre"),
+    "watching": L("You're watching this race", "Tu regardes cette course"),
+    "nextRaceSoon": L("You'll race in the next one!", "Tu cours à la prochaine !"),
+    "backToLobby": L("Back to the lobby", "Retour au salon"),
+    "pickCup": L("Cup", "Coupe"),
 }
 
 BONUSES = {
@@ -211,23 +258,13 @@ RACERS = [
     {"name": L("Oozi"), "color": "#e8dcc8"},
 ]
 
-ASSET_FILES = {
-    "karts": ["kart_oobi", "kart_oodi", "kart_ooli", "kart_oopi", "kart_oozi"],
-    "itemBox": "item_box",
-    "banana": "banana",
-    "coin": "coin",
-    "cone": "cone",
-    "tree": "tree",
-    "treePine": "tree_pine",
-    "smoke": "smoke",
-    "debrisTire": "debris_tire",
-    "gantry": "question_gantry",
-    "startArch": "start_arch",
-    "boostPad": "boost_pad",
-    "tireWall": "tire_wall",
-    "grandstand": "grandstand",
-    "flag": "flag",
-}
+KARTS = ["kart_oobi", "kart_oodi", "kart_ooli", "kart_oopi", "kart_oozi"]
+
+
+def model_ids():
+    """Every model in game/public/models except the karts, by file name."""
+    d = os.path.join(ROOT, "game", "public", "models")
+    return sorted(f[:-4] for f in os.listdir(d) if f.endswith(".glb") and f[:-4] not in KARTS)
 
 
 def suggest_rows():
@@ -239,15 +276,14 @@ def suggest_rows():
     for line in out.splitlines():
         if "rows=" in line:
             cid = line.split()[1].rstrip(":")
-            rows[cid] = json.loads(line.split("rows=")[1])
+            rest = line.split("rows=")[1]
+            r, j = rest.split(" jumps=")
+            rows[cid] = (json.loads(r), json.loads(j))
     return rows
 
 
 def assets(url_for):
-    a = {}
-    for k, v in ASSET_FILES.items():
-        a[k] = [url_for(x) for x in v] if isinstance(v, list) else url_for(v)
-    return a
+    return {"karts": [url_for(k) for k in KARTS], "models": [{"id": m, "url": url_for(m)} for m in model_ids()]}
 
 
 def build(url_for):
@@ -255,6 +291,15 @@ def build(url_for):
     cups = []
     for c in CUPS:
         t = TRACKS[c["track"]]
+        rws, jumps = rows.get(c["track"], ([0.3, 0.62, 0.86], []))
+        length = None
+        # keep boost pads off the landing zones: move a pad that sits just after a lip to just before it
+        boosts = []
+        for b in c["boosts"]:
+            for j in jumps:
+                if 0 <= (b - j) % 1 < 0.05:
+                    b = (j - 0.06) % 1
+            boosts.append(round(b, 3))
         qs = []
         for k, item in enumerate(c["qs"]):
             prompt, answers = item[0], item[1]
@@ -266,12 +311,15 @@ def build(url_for):
                 "name": c["name"],
                 "topic": c["topic"],
                 "mood": c["mood"],
+                "theme": c["theme"],
                 "ground": c["ground"],
                 "laps": 3,
                 "width": 16,
+                "bank": 9,
                 "points": t["points"],
-                "rows": rows.get(c["track"], [0.3, 0.62, 0.86]),
-                "boosts": c["boosts"],
+                "rows": rws,
+                "boosts": boosts,
+                "jumps": jumps,
                 "questions": qs,
             }
         )
@@ -284,6 +332,7 @@ def build(url_for):
         "ui": UI,
         "assets": assets(url_for),
         "boardPrefix": "cup",
+        "joinLink": "",
     }
 
 
@@ -296,7 +345,10 @@ def main():
     urls_path = os.path.join(ROOT, "content", "asset-urls.json")
     if os.path.exists(urls_path):
         urls = json.load(open(urls_path))
-        cdn = build(lambda n: urls[n])
+        missing = [m for m in KARTS + model_ids() if m not in urls]
+        if missing:
+            print("not uploaded yet:", ", ".join(missing))
+        cdn = build(lambda n: urls.get(n, ""))
         with open(os.path.join(ROOT, "content", "props.edverse.json"), "w") as f:
             json.dump(cdn, f, ensure_ascii=False, indent=1)
         print("wrote content/props.edverse.json")

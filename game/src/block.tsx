@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useMexty, useLanguage, useCloudSave } from "@mexty/sdk";
 import "./game/game.css";
-import { Engine, HudState, RaceEvent, RaceResult, RaceTexts, RacerDef, Quality } from "./game/engine";
+import { Engine, HudState, RaceEvent, RaceResult, RaceTexts, RacerSpec, Tier, Standing } from "./game/engine";
 import { loadKit, Kit } from "./game/assets";
 import { Sfx } from "./game/audio";
-import { gpuInfo } from "./game/perf";
+import { autoTier } from "./game/render";
 import { Title, HowTo, CupSelect, RacerSelect, Hud, Pause, Results, Loading, Board, BoardEntry, Progress, Flash, AnswerLog, T } from "./game/ui";
+import { OnlineHub, LobbyRoom, CodeEntry } from "./game/ui-online";
+import { Lobby, LobbyState, Directory, LobbyAd, newCode, cleanCode, isCode, SharedStore, LobbyInfo } from "./net/lobby";
+import { netMode } from "./net/transport";
 
 /**
  * A text in every language the game is played in, keyed by ISO 639-1 code: { "en": "Start", "fr": "Départ" }.
@@ -47,18 +50,24 @@ export interface Cup {
   topic: LocalizedText;
   /** Lighting: morning, day, sunset or night. */
   mood?: "morning" | "day" | "sunset" | "night";
+  /** Scenery: meadow, hills, desert or night (neon city). Default: from the lighting. */
+  theme?: "meadow" | "hills" | "desert" | "night";
   /** Lawn colour (CSS colour). */
   ground?: string;
   /** Laps per race (1–5, default 3). */
   laps?: number;
   /** Road width in metres (12–24, default 16). */
   width?: number;
+  /** Banking of the corners in degrees (0–16, default 9). */
+  bank?: number;
   /** The circuit's control points, driven in order; the first point is the start line. */
   points: TrackPoint[];
   /** Where the answer rows stand, as fractions of a lap (0..1), e.g. [0.3, 0.62, 0.86]. Put them on straights. */
   rows?: number[];
   /** Where the boost pads lie, as fractions of a lap. */
   boosts?: number[];
+  /** Where the jump ramps stand (the lip), as fractions of a lap. Put them on straights, away from rows. */
+  jumps?: number[];
   /** The question bank: questions are drawn in a shuffled order, one per row per lap. */
   questions: Question[];
 }
@@ -87,6 +96,8 @@ export interface BonusTexts {
 
 export interface UiText {
   play: LocalizedText;
+  playSolo: LocalizedText;
+  playOnline: LocalizedText;
   howToPlay: LocalizedText;
   howSteps: LocalizedText[];
   controlsKeys: LocalizedText;
@@ -100,6 +111,7 @@ export interface UiText {
   laps: LocalizedText;
   chooseRacer: LocalizedText;
   start: LocalizedText;
+  getReady: LocalizedText;
   lap: LocalizedText;
   finalLap: LocalizedText;
   go: LocalizedText;
@@ -118,6 +130,7 @@ export interface UiText {
   shielded: LocalizedText;
   hitPeel: LocalizedText;
   hitNova: LocalizedText;
+  trick: LocalizedText;
   finish: LocalizedText;
   paused: LocalizedText;
   resume: LocalizedText;
@@ -125,8 +138,11 @@ export interface UiText {
   quit: LocalizedText;
   sound: LocalizedText;
   quality: LocalizedText;
+  qualityAuto: LocalizedText;
   qualityLow: LocalizedText;
+  qualityMedium: LocalizedText;
   qualityHigh: LocalizedText;
+  qualityUltra: LocalizedText;
   on: LocalizedText;
   off: LocalizedText;
   podium: LocalizedText;
@@ -142,26 +158,55 @@ export interface UiText {
   boardEmpty: LocalizedText;
   /** "1st", "2nd"… one per position. */
   ordinals: LocalizedText[];
+  /** Online play */
+  quickRace: LocalizedText;
+  quickRaceHint: LocalizedText;
+  joinWithCode: LocalizedText;
+  createRace: LocalizedText;
+  publicRace: LocalizedText;
+  privateRace: LocalizedText;
+  publicHint: LocalizedText;
+  privateHint: LocalizedText;
+  openRaces: LocalizedText;
+  noOpenRaces: LocalizedText;
+  join: LocalizedText;
+  watch: LocalizedText;
+  waiting: LocalizedText;
+  racing: LocalizedText;
+  enterCode: LocalizedText;
+  codeNotFound: LocalizedText;
+  lobbyFull: LocalizedText;
+  connecting: LocalizedText;
+  onlineUnavailable: LocalizedText;
+  leave: LocalizedText;
+  players: LocalizedText;
+  you: LocalizedText;
+  hostTag: LocalizedText;
+  aiTag: LocalizedText;
+  waitingForHost: LocalizedText;
+  startRace: LocalizedText;
+  startsIn: LocalizedText;
+  aiFill: LocalizedText;
+  shareCode: LocalizedText;
+  scanToJoin: LocalizedText;
+  watching: LocalizedText;
+  nextRaceSoon: LocalizedText;
+  backToLobby: LocalizedText;
+  pickCup: LocalizedText;
 }
 
-/** URLs of the asset kit (GLB models). Karts: Kenney Car Kit (CC0); boxes, coins, peels, trees: Kenney Toy Car Kit (CC0); track furniture: built in Blender. */
+/** A model of the asset kit: `id` is the name the game looks for (e.g. "item_box_v2", "windmill"). */
+export interface ModelRef {
+  id: string;
+  url: string;
+}
+
+/** URLs of the asset kit (GLB models). Karts: Kenney Car Kit (CC0); boxes, coins, peels: Kenney Toy Car Kit (CC0); track furniture and scenery: built in Blender. */
 export interface AssetUrls {
   /** One kart per racer, in the same order as `racers`. */
   karts: string[];
-  itemBox: string;
-  banana: string;
-  coin: string;
-  cone: string;
-  tree: string;
-  treePine: string;
-  smoke: string;
-  debrisTire: string;
-  gantry: string;
-  startArch: string;
-  boostPad: string;
-  tireWall: string;
-  grandstand: string;
-  flag: string;
+  /** Every other model, by id. */
+  models: ModelRef[];
 }
 
 export interface BlockProps {
@@ -176,12 +221,24 @@ export interface BlockProps {
   assets?: AssetUrls;
   /** Leaderboard id prefix (one board per cup). */
   boardPrefix?: string;
+  /** Online races: the link a QR code opens to join a private race; {code} is replaced by the race code. */
+  joinLink?: string;
 }
 
-type Screen = "loading" | "title" | "howto" | "cups" | "racer" | "race" | "results";
+const DEBUG = (() => {
+  try {
+    return /qkdebug/.test(window.location.search);
+  } catch {
+    return false;
+  }
+})();
+
+type Screen = "loading" | "title" | "howto" | "cups" | "racer" | "race" | "results" | "online" | "lobby";
 
 const SCORE_BASE = 10_000_000;
 const EMPTY: Progress = { unlocked: 0, best: {}, racer: 0 };
+const ADJ = ["Blue", "Brave", "Bright", "Calm", "Clever", "Cosmic", "Curious", "Gentle", "Golden", "Happy", "Jolly", "Lucky", "Mighty", "Quick", "Sunny", "Swift"];
+const ANI = ["Fox", "Owl", "Panda", "Otter", "Tiger", "Koala", "Dolphin", "Falcon", "Turtle", "Rabbit", "Penguin", "Lion", "Hedgehog", "Whale", "Lynx", "Robin"];
 
 const lsGet = (k: string) => {
   try {
@@ -198,13 +255,42 @@ const lsSet = (k: string, v: string) => {
   }
 };
 
-function initialQuality(): Quality {
-  const q = lsGet("qk-quality");
-  if (q === "low" || q === "high") return q;
-  if (typeof window === "undefined") return "low";
-  const coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-  const cores = (navigator as any).hardwareConcurrency ?? 4;
-  return coarse || cores <= 4 || gpuInfo().weak ? "low" : "high";
+/** SDK calls never break the game: a missing or failing call is just "not stored". */
+function safe(f: () => Promise<boolean>): Promise<boolean> {
+  try {
+    return Promise.resolve(f()).catch(() => false);
+  } catch {
+    return Promise.resolve(false);
+  }
+}
+
+/** A friendly made-up nickname for players the store gives none (guests, previews). */
+function localNick() {
+  const saved = lsGet("qk-nick");
+  if (saved) return saved;
+  const n = `${ADJ[Math.floor(Math.random() * 16)]} ${ANI[Math.floor(Math.random() * 16)]} ${10 + Math.floor(Math.random() * 90)}`;
+  lsSet("qk-nick", n);
+  return n;
+}
+
+function joinCodeFromUrl(): string {
+  try {
+    const sources = [window.location.search, window.location.hash.replace(/^#/, "?"), (document.referrer || "").replace(/^[^?]*/, "")];
+    for (let i = 0; i < sources.length; i++) {
+      const q = new URLSearchParams(sources[i]);
+      const c = cleanCode(q.get("join") || q.get("race") || "");
+      if (isCode(c)) return c;
+    }
+  } catch {
+    /* no URL */
+  }
+  return "";
+}
+
+type TierPref = "auto" | Tier;
+function initialTierPref(): TierPref {
+  const q = lsGet("qk-tier");
+  return q === "low" || q === "medium" || q === "high" || q === "ultra" ? q : "auto";
 }
 
 interface HudStore {
@@ -255,32 +341,53 @@ export const Block: React.FC<BlockProps> = (props) => {
   const [ci, setCi] = useState(0);
   const [flash, setFlash] = useState<Flash | null>(null);
   const [userPaused, setUserPaused] = useState(false);
-  const [quality, setQualityS] = useState<Quality>(initialQuality);
+  const [tierPref, setTierPrefS] = useState<TierPref>(initialTierPref);
+  const [tierNow, setTierNow] = useState<Tier>("high");
   const [soundOn, setSoundOn] = useState(lsGet("qk-sound") !== "0");
-  const [result, setResult] = useState<(RaceResult & { record: boolean }) | null>(null);
+  const [result, setResult] = useState<(RaceResult & { record: boolean; online: boolean }) | null>(null);
   const answersRef = useRef<AnswerLog[]>([]);
   const [board, setBoard] = useState<{ loading: boolean; entries: BoardEntry[] }>({ loading: false, entries: [] });
   const [guest, setGuest] = useState(true);
+  const [nick, setNick] = useState<string>("");
   const { value: saved, save } = useCloudSave<Progress>("progress", EMPTY);
   const prog: Progress = { ...EMPTY, ...(saved ?? {}) };
+  if (DEBUG) prog.unlocked = 99;
   const progRef = useRef(prog);
   progRef.current = prog;
   const [racer, setRacer] = useState(0);
   const lastHover = useRef<Element | null>(null);
+  // online
+  const dirRef = useRef<Directory | null>(null);
+  const lobbyRef = useRef<Lobby | null>(null);
+  const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
+  const [ads, setAds] = useState<LobbyAd[]>([]);
+  const [dirStatus, setDirStatus] = useState<string>("idle");
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [onlineError, setOnlineError] = useState<string>("");
+  const raceIdRef = useRef(0);
+  const wasHostRef = useRef(false);
+  const pendingJoin = useRef<string>(joinCodeFromUrl());
 
   const touch = useMemo(() => {
     if (typeof window === "undefined") return false;
     return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || "ontouchstart" in window;
   }, []);
   const cup = cups[ci];
+  const fallbackApi = useMemo(() => {
+    const u = props.assets && props.assets.karts && props.assets.karts[0];
+    return /mexty\.ai/.test(u || "") ? new URL(u!).origin : "https://api.mexty.ai";
+  }, [props.assets]);
 
   // ------------------------------------------------------------ boot
   useEffect(() => {
     mexty.ready();
     mexty
       .getPlayer()
-      .then((p) => setGuest(p.isGuest))
-      .catch(() => {});
+      .then((p) => {
+        setGuest(p.isGuest);
+        setNick(p.nickname || localNick());
+      })
+      .catch(() => setNick(localNick()));
   }, []);
 
   useEffect(() => {
@@ -295,15 +402,8 @@ export const Block: React.FC<BlockProps> = (props) => {
     };
   }, [JSON.stringify(props.assets ?? {})]);
 
-  const racerDefs = useCallback(
-    (): RacerDef[] =>
-      racersT.slice(0, 5).map((r, i) => ({
-        kart: i,
-        name: t(r.name) || `#${i + 1}`,
-        color: r.color || "#8c78ff",
-      })),
-    [racersT, t]
-  );
+  const racerName = useCallback((i: number) => t((racersT[i] || racersT[0] || ({} as RacerText)).name) || `#${i + 1}`, [racersT, t]);
+  const racerColor = (i: number) => (racersT[i] && racersT[i].color) || "#8c78ff";
 
   const raceTexts = useCallback(
     (c: Cup): RaceTexts => ({
@@ -312,28 +412,44 @@ export const Block: React.FC<BlockProps> = (props) => {
       answers: (c.questions ?? []).map((q) => (q.answers ?? []).map((a) => t(a))),
       correct: (c.questions ?? []).map((q) => Math.max(0, Math.min((q.answers ?? []).length - 1, q.correct ?? 0))),
       explains: (c.questions ?? []).map((q) => t(q.explain)),
-      racerNames: racersT.map((r) => t(r.name)),
     }),
-    [t, ui, racersT]
+    [t, ui]
   );
+
+  /** Solo grid: the player 4th of five, the other racers as AI. */
+  const soloGrid = useCallback(
+    (me: number): RacerSpec[] => {
+      const n = Math.min(5, Math.max(1, racersT.length));
+      const others: RacerSpec[] = [];
+      for (let i = 0; i < n; i++) if (i !== me) others.push({ id: `ai${i}`, kind: "ai", kart: i, name: racerName(i), color: racerColor(i) });
+      const grid = others.slice();
+      grid.splice(Math.min(3, grid.length), 0, { id: "me", kind: "player", kart: me, name: racerName(me), color: racerColor(me) });
+      return grid;
+    },
+    [racersT, racerName]
+  );
+  const demoGrid = useCallback((): RacerSpec[] => racersT.slice(0, 5).map((_, i) => ({ id: `ai${i}`, kind: "ai" as const, kart: i, name: racerName(i), color: racerColor(i) })), [racersT, racerName]);
 
   // create the engine once the kit is ready
   useEffect(() => {
     if (!kit || !canvasRef.current || engineRef.current || cups.length === 0) return;
     let e: Engine;
     try {
-      e = new Engine(canvasRef.current, kit, quality, sfxRef.current, { scale: gpuInfo().software ? 0.6 : 1 });
+      e = new Engine(canvasRef.current, kit, tierPref === "auto" ? autoTier() : tierPref, sfxRef.current);
     } catch (err) {
       console.warn("[Quiz Kart] WebGL unavailable", err);
       return;
     }
+    e.r.autoTier = tierPref === "auto";
+    setTierNow(e.tier);
+    e.r.onTierChange = (tt) => setTierNow(tt);
     engineRef.current = e;
     try {
       if (/qkdebug/.test(window.location.search)) (window as any).__qk = e;
     } catch {
       /* ignore */
     }
-    e.loadCup(cups[0], raceTexts(cups[0]), racerDefs(), 0, true);
+    e.loadDemo(cups[0], raceTexts(cups[0]), demoGrid());
     setScreen("title");
     return () => {
       e.dispose();
@@ -346,7 +462,12 @@ export const Block: React.FC<BlockProps> = (props) => {
   // language change: redraw the in-world texts
   useEffect(() => {
     const e = engineRef.current;
-    if (e && e.cup) e.relabel(raceTexts(e.cup));
+    if (!e || !e.cup) return;
+    const names: { [id: string]: string } = {};
+    e.racers.forEach((r) => {
+      if (r.spec.kind === "ai") names[r.spec.id] = racerName(r.spec.kart);
+    });
+    e.relabel(raceTexts(e.cup), names);
   }, [raceTexts]);
 
   // sound
@@ -356,6 +477,7 @@ export const Block: React.FC<BlockProps> = (props) => {
   }, [mexty.muted, soundOn]);
 
   const racing = screen === "race";
+  const online = !!lobbyState && (screen === "lobby" || screen === "race" || screen === "results");
   useEffect(() => {
     const e = engineRef.current;
     if (!e) return;
@@ -368,7 +490,7 @@ export const Block: React.FC<BlockProps> = (props) => {
     if (!e) return;
     e.hudOn = racing;
     e.focus = screen === "racer" ? racer : null;
-    e.setBackground(!racing && screen !== "title" && screen !== "loading");
+    e.setBackground(!racing && screen !== "title" && screen !== "loading" && screen !== "results");
     sfxRef.current.music(racing && !userPaused && !mexty.paused);
   });
 
@@ -392,16 +514,15 @@ export const Block: React.FC<BlockProps> = (props) => {
     [prefix]
   );
 
-  const finishRace = useCallback(
-    (r: RaceResult) => {
-      const c = cups[ci];
-      if (!c) return;
+  /** Saves, learning progress and the board: the same for solo and online races. */
+  const recordRace = useCallback(
+    (c: Cup, idx: number, r: RaceResult, online: boolean) => {
       const p = progRef.current;
       const prev = p.best[c.id];
       const record = !prev || r.position < prev.pos || (r.position === prev.pos && r.timeMs < prev.timeMs);
       const best = { ...p.best };
       if (record) best[c.id] = { pos: r.position, timeMs: r.timeMs, correct: r.correct, asked: r.asked };
-      save({ ...p, best, unlocked: Math.max(p.unlocked, Math.min(cups.length - 1, ci + 1)), racer });
+      save({ ...p, best, unlocked: Math.max(p.unlocked, Math.min(cups.length - 1, idx + 1)), racer });
       mexty.progress.complete(r.correct, Math.max(1, r.asked), { timeSpentMs: r.timeMs });
       mexty.gameplayStop();
       mexty.leaderboard
@@ -409,15 +530,27 @@ export const Block: React.FC<BlockProps> = (props) => {
         .then(() => loadBoard(c))
         .catch(() => loadBoard(c));
       if (r.position <= 3) mexty.celebrate();
-      setResult({ ...r, record });
-      setScreen("results");
+      return record;
     },
-    [ci, cups, racer, prefix, loadBoard]
+    [cups, racer, prefix, loadBoard]
+  );
+
+  const finishSolo = useCallback(
+    (r: RaceResult) => {
+      const c = cups[ci];
+      if (!c) return;
+      const record = recordRace(c, ci, r, false);
+      setResult({ ...r, record, online: false });
+      setScreen("results");
+      engineRef.current?.showPodium(r.standings.map((s) => s.id));
+    },
+    [ci, cups, recordRace]
   );
 
   const onEvent = useCallback(
     (ev: RaceEvent) => {
-      const c = cups[ci];
+      const e = engineRef.current;
+      const c = e && e.cup;
       if (!c) return;
       switch (ev.type) {
         case "go":
@@ -448,12 +581,25 @@ export const Block: React.FC<BlockProps> = (props) => {
         case "hit":
           showFlash({ kind: "bad", main: ev.by === "peel" ? t(ui.hitPeel) : t(ui.hitNova) }, 1200);
           break;
+        case "trick":
+          showFlash({ kind: "info", main: t(ui.trick) }, 900);
+          break;
         case "finish":
-          finishRace(ev.result);
+          if (lobbyRef.current && e.setup && e.setup.mode === "online") {
+            const L = lobbyRef.current;
+            const idx = Math.max(0, cups.findIndex((x) => x.id === c.id));
+            const record = recordRace(c, idx, ev.result, true);
+            setResult({ ...ev.result, record, online: true });
+            L.reportFinish(raceIdRef.current, ev.result.timeMs);
+            showFlash({ kind: "go", main: t(ui.finish) }, 2200);
+          } else finishSolo(ev.result);
+          break;
+        case "botFinish":
+          if (lobbyRef.current) lobbyRef.current.botFinish(ev.id, ev.ms);
           break;
       }
     },
-    [ci, cups, t, ui, bonuses, finishRace]
+    [cups, t, ui, bonuses, finishSolo, recordRace]
   );
 
   useEffect(() => {
@@ -462,18 +608,19 @@ export const Block: React.FC<BlockProps> = (props) => {
     e.onHud = (h) => hudStore.set(h);
     e.onEvent = onEvent;
     e.input.onAction = (a) => {
-      if (a === "pause" && (e.phase === "racing" || e.phase === "countdown")) setUserPaused((p) => !p);
+      if (a === "pause" && (e.phase === "racing" || e.phase === "countdown" || e.phase === "intro")) setUserPaused((p) => !p);
       if (a === "bonus" && !e.paused) e.useBonus();
     };
   });
 
-  // ------------------------------------------------------------ navigation
+  // ------------------------------------------------------------ solo navigation
   const startRace = (i = ci) => {
     const e = engineRef.current;
     const c = cups[i];
     if (!e || !c) return;
     sfxRef.current.ensure();
-    e.loadCup(c, raceTexts(c), racerDefs(), racer, false);
+    e.net = null;
+    e.load({ cup: c, texts: raceTexts(c), grid: soloGrid(racer), seed: Math.floor(Math.random() * 1e9), laps: c.laps ?? 3, mode: "solo" });
     answersRef.current = [];
     setResult(null);
     setUserPaused(false);
@@ -482,27 +629,204 @@ export const Block: React.FC<BlockProps> = (props) => {
     setScreen("race");
   };
 
-  const toCups = () => {
+  const backToDemo = (c?: Cup) => {
     const e = engineRef.current;
+    const cc = c || cups[ci] || cups[0];
+    if (e && cc) e.loadDemo(cc, raceTexts(cc), demoGrid());
+  };
+
+  const toCups = () => {
     sfxRef.current.stopEngine();
     mexty.gameplayStop();
     setUserPaused(false);
-    if (e && cups[0] && e.phase !== "demo") e.loadCup(cups[ci] ?? cups[0], raceTexts(cups[ci] ?? cups[0]), racerDefs(), 0, true);
+    backToDemo();
     setScreen("cups");
   };
 
   const pickCup = (i: number) => {
     setCi(i);
-    const e = engineRef.current;
-    if (e) e.loadCup(cups[i], raceTexts(cups[i]), racerDefs(), 0, true);
+    backToDemo(cups[i]);
     setScreen("racer");
   };
 
-  const setQuality = (q: Quality) => {
-    setQualityS(q);
-    lsSet("qk-quality", q);
-    engineRef.current?.setQuality(q);
+  const setTierPref = (q: TierPref) => {
+    setTierPrefS(q);
+    lsSet("qk-tier", q);
+    const e = engineRef.current;
+    if (!e) return;
+    if (q === "auto") e.setTier(autoTier(), true);
+    else e.setTier(q, false);
+    setTierNow(e.tier);
   };
+
+  // ------------------------------------------------------------ online
+  const store: SharedStore = useMemo(
+    () => {
+      // @mexty/sdk 0.4.0 keyed rows: one "lobby" row per host, refreshed as a heartbeat, removed on leave
+      return {
+        set: (key: string, d: Record<string, unknown>) => safe(() => mexty.shared.set("lobbies", key, d)),
+        remove: (key: string) => safe(() => mexty.shared.remove("lobbies", key)),
+        add: (d: Record<string, unknown>) => mexty.shared.add("lobbies", d),
+        list: () => mexty.shared.list("lobbies", { limit: 100 }) as Promise<any[]>,
+      now: async () => {
+        try {
+          return (await mexty.serverTime()).getTime();
+        } catch {
+          return Date.now();
+        }
+      },
+      };
+    },
+    []
+  );
+  const directory = () => {
+    if (!dirRef.current) dirRef.current = new Directory(nick || localNick(), fallbackApi, store);
+    return dirRef.current;
+  };
+
+  // watch the public list while the online screen is open
+  useEffect(() => {
+    if (screen !== "online") return;
+    const d = directory();
+    return d.watch((list, st) => {
+      setAds(list);
+      setDirStatus(st);
+    });
+  }, [screen, nick]);
+
+  const leaveLobby = () => {
+    const L = lobbyRef.current;
+    if (L) L.leave();
+    lobbyRef.current = null;
+    setLobbyState(null);
+    raceIdRef.current = 0;
+    const e = engineRef.current;
+    if (e) e.net = null;
+  };
+
+  const enterLobby = (code: string, create: boolean, pub: boolean, quick: boolean) => {
+    leaveLobby();
+    sfxRef.current.ensure();
+    setOnlineError("");
+    const c = cups[ci] || cups[0];
+    const L = new Lobby(code, { nick: nick || localNick(), racer }, { create, pub, quick, cupId: c.id, laps: c.laps ?? 3, fallbackApi, directory: pub ? directory() : null });
+    lobbyRef.current = L;
+    try {
+      if (/qkdebug/.test(window.location.search)) (window as any).__qkLobby = L;
+    } catch {
+      /* ignore */
+    }
+    L.progressOf = (id) => (engineRef.current ? engineRef.current.progressById(id) : 0);
+    L.onRace((from, m) => engineRef.current && engineRef.current.applyNet(from, m));
+    L.subscribe((s) => setLobbyState({ ...s }));
+    void L.connect();
+    setScreen("lobby");
+  };
+
+  const quickRace = () => {
+    const open = ads.filter((a) => a.quick && a.live && a.count < a.max);
+    const pickAd = open.filter((a) => a.phase === "waiting").sort((a, b) => b.count - a.count)[0] || open[0];
+    if (pickAd) enterLobby(pickAd.code, false, true, true);
+    else enterLobby(newCode(), true, true, true);
+  };
+
+  // URL ?join=CODE: straight into that race
+  useEffect(() => {
+    if (screen === "title" && pendingJoin.current && nick) {
+      const c = pendingJoin.current;
+      pendingJoin.current = "";
+      enterLobby(c, false, false, false);
+    }
+  }, [screen, nick]);
+
+  // follow the lobby: races start and end on the host's word
+  useEffect(() => {
+    const s = lobbyState;
+    const e = engineRef.current;
+    const L = lobbyRef.current;
+    if (!s || !e || !L) return;
+    if (s.status === "notfound" || s.status === "full" || s.status === "error") {
+      setOnlineError(s.status === "notfound" ? t(ui.codeNotFound) : s.status === "full" ? t(ui.lobbyFull) : t(ui.onlineUnavailable));
+      leaveLobby();
+      setScreen("online");
+      return;
+    }
+    const info = s.info;
+    if (!info) return;
+    // host hand-over during a race: drive the AI karts from here
+    if (s.isHost && !wasHostRef.current && e.setup && e.setup.mode === "online" && info.phase === "racing") e.takeOverBots();
+    wasHostRef.current = s.isHost;
+    // a racer left mid-race
+    if (e.setup && e.setup.mode === "online") {
+      const here = s.members.map((m) => m.id);
+      e.racers.forEach((r) => {
+        if (r.spec.kind === "remote" && here.indexOf(r.spec.id) < 0) e.dropRacer(r.spec.id);
+      });
+    }
+    if (info.phase === "racing" && info.raceId !== raceIdRef.current) {
+      raceIdRef.current = info.raceId;
+      startOnline(info, s.me);
+    } else if (info.phase === "results" && info.results && screen === "race") {
+      showOnlineResults(info);
+    } else if (info.phase === "waiting" && (screen === "race" || screen === "results")) {
+      backToDemo(cups.find((c) => c.id === info.cupId));
+      setScreen("lobby");
+    }
+  }, [lobbyState]);
+
+  const startOnline = (info: LobbyInfo, me: string) => {
+    const e = engineRef.current;
+    const L = lobbyRef.current;
+    if (!e || !L) return;
+    const idx = Math.max(0, cups.findIndex((c) => c.id === info.cupId));
+    const c = cups[idx];
+    if (!c) return;
+    setCi(idx);
+    const grid: RacerSpec[] = info.grid.map((g) => ({
+      id: g.id,
+      kind: g.id === me ? "player" : g.bot ? "ai" : "remote",
+      kart: Math.max(0, Math.min(racersT.length - 1, g.racer)),
+      name: g.bot ? racerName(g.racer) : g.nick,
+      color: racerColor(g.racer),
+    }));
+    e.net = { now: () => L.now(), send: (m, rel) => L.sendRace(m, rel) };
+    e.load({ cup: c, texts: raceTexts(c), grid, seed: info.seed, laps: info.laps, mode: "online", startAt: info.startAt, raceId: info.raceId, host: L.isHost });
+    answersRef.current = [];
+    setResult(null);
+    setUserPaused(false);
+    setFlash(null);
+    mexty.progress.level(idx + 1);
+    setScreen("race");
+  };
+
+  const showOnlineResults = (info: LobbyInfo) => {
+    const e = engineRef.current;
+    const res = info.results || [];
+    const me = lobbyState ? lobbyState.me : "";
+    const standings: Standing[] = res.map((s) => ({ id: s.id, name: s.bot ? racerName(s.racer) : s.nick, player: s.id === me, timeMs: s.ms, color: racerColor(s.racer), kart: s.racer }));
+    const mine = result;
+    const pos = Math.max(1, standings.findIndex((s) => s.player) + 1);
+    setResult({
+      position: pos,
+      racers: standings.length,
+      timeMs: mine ? mine.timeMs : 0,
+      correct: mine ? mine.correct : 0,
+      answered: mine ? mine.answered : 0,
+      asked: mine ? mine.asked : 0,
+      coins: mine ? mine.coins : 0,
+      standings,
+      record: mine ? mine.record : false,
+      online: true,
+    });
+    if (e) e.showPodium(res.map((s) => s.id));
+    setScreen("results");
+  };
+
+  try {
+    if (/qkdebug/.test(window.location.search)) (window as any).__qkStart = (i: number) => startRace(i);
+  } catch {
+    /* ignore */
+  }
 
   // ------------------------------------------------------------ render
   if (cups.length === 0) {
@@ -530,14 +854,45 @@ export const Block: React.FC<BlockProps> = (props) => {
     },
   };
 
-  const showPause = racing && (userPaused || mexty.paused);
-  const outline = engineRef.current ? engineRef.current.mapOutline() : null;
+  const e = engineRef.current;
+  const onlineRace = !!(e && e.setup && e.setup.mode === "online");
+  const showPause = racing && (userPaused || (mexty.paused && !onlineRace));
+  const outline = e ? e.mapOutline() : null;
+  const cupName = (id: string) => {
+    const c = cups.find((x) => x.id === id);
+    return c ? t(c.name) : "";
+  };
+  const joinLink = (code: string) => {
+    const tpl = props.joinLink || "";
+    if (tpl) return tpl.replace("{code}", code);
+    try {
+      const ref = document.referrer || window.location.href;
+      const u = new URL(ref);
+      u.searchParams.set("join", code);
+      return u.toString();
+    } catch {
+      return code;
+    }
+  };
 
   return (
-    <div className={`qk-root ${quality === "low" ? "qk-low" : ""}`} {...uiSounds}>
+    <div className={`qk-root tier-${tierNow}`} {...uiSounds}>
       <canvas ref={canvasRef} className="qk-canvas" />
       {screen === "loading" && <Loading p={loadP} label={t(ui.loading)} title={t(props.title)} />}
-      {screen === "title" && <Title t={t} title={props.title ?? {}} subtitle={props.subtitle ?? {}} ui={ui} onPlay={() => setScreen("cups")} onHow={() => setScreen("howto")} />}
+      {screen === "title" && (
+        <Title
+          t={t}
+          title={props.title ?? {}}
+          subtitle={props.subtitle ?? {}}
+          ui={ui}
+          onSolo={() => setScreen("cups")}
+          onOnline={() => {
+            setOnlineError("");
+            setScreen("online");
+          }}
+          onHow={() => setScreen("howto")}
+        />
+      )}
       {screen === "howto" && <HowTo t={t} ui={ui} bonuses={bonuses} touch={touch} onBack={() => setScreen("title")} />}
       {screen === "cups" && <CupSelect t={t} ui={ui} cups={cups} prog={prog} onPick={pickCup} onBack={() => setScreen("title")} />}
       {screen === "racer" && cup && (
@@ -555,6 +910,62 @@ export const Block: React.FC<BlockProps> = (props) => {
           onBack={() => setScreen("cups")}
         />
       )}
+      {screen === "online" && (
+        <OnlineHub
+          t={t}
+          ui={ui}
+          ads={ads}
+          status={dirStatus}
+          error={onlineError}
+          cups={cups}
+          cupName={cupName}
+          local={netMode() === "local"}
+          onQuick={quickRace}
+          onCode={() => setCodeOpen(true)}
+          onCreate={(pub, cupIdx) => {
+            setCi(cupIdx);
+            enterLobby(newCode(), true, pub, false);
+          }}
+          onJoin={(code) => enterLobby(code, false, true, false)}
+          onBack={() => setScreen("title")}
+        />
+      )}
+      {codeOpen && (
+        <CodeEntry
+          t={t}
+          ui={ui}
+          onCancel={() => setCodeOpen(false)}
+          onJoin={(code) => {
+            setCodeOpen(false);
+            enterLobby(code, false, false, false);
+          }}
+        />
+      )}
+      {screen === "lobby" && lobbyState && (
+        <LobbyRoom
+          t={t}
+          ui={ui}
+          state={lobbyState}
+          now={() => (lobbyRef.current ? lobbyRef.current.now() : Date.now())}
+          racers={racersT.slice(0, 5)}
+          sel={racer}
+          cups={cups}
+          cupName={cupName}
+          joinLink={joinLink}
+          onSel={(i) => {
+            setRacer(i);
+            save({ ...progRef.current, racer: i });
+            lobbyRef.current?.setRacer(i);
+          }}
+          onCup={(id) => lobbyRef.current?.setCup(id)}
+          onStart={() => lobbyRef.current?.start()}
+          onLeave={() => {
+            leaveLobby();
+            backToDemo();
+            setScreen("online");
+          }}
+        />
+      )}
       {racing && (
         <LiveHud store={hudStore}>
           {(hud) => (
@@ -567,8 +978,10 @@ export const Block: React.FC<BlockProps> = (props) => {
               flash={flash}
               outline={outline}
               bonuses={bonuses}
+              cupName={e && e.cup ? t(e.cup.name) : ""}
               onPause={() => setUserPaused(true)}
               onBonus={() => engineRef.current?.useBonus()}
+              onSpectate={() => engineRef.current?.spectateNext()}
             />
           )}
         </LiveHud>
@@ -579,11 +992,20 @@ export const Block: React.FC<BlockProps> = (props) => {
           ui={ui}
           sound={soundOn}
           setSound={setSoundOn}
-          quality={quality}
-          setQuality={setQuality}
+          tier={tierPref}
+          tierNow={tierNow}
+          setTier={setTierPref}
+          online={onlineRace}
           onResume={() => setUserPaused(false)}
           onRestart={() => startRace()}
-          onQuit={toCups}
+          onQuit={() => {
+            setUserPaused(false);
+            if (onlineRace) {
+              leaveLobby();
+              backToDemo();
+              setScreen("online");
+            } else toCups();
+          }}
         />
       )}
       {screen === "results" && result && cup && (
@@ -599,7 +1021,8 @@ export const Block: React.FC<BlockProps> = (props) => {
           standings={result.standings}
           answers={answersRef.current}
           board={<Board t={t} ui={ui} entries={board.entries} loading={board.loading} guest={guest} toMs={(s) => SCORE_BASE - s} />}
-          hasNext={ci < cups.length - 1}
+          online={result.online}
+          hasNext={!result.online && ci < cups.length - 1}
           nextUnlocked={ci + 1 <= Math.max(prog.unlocked, ci + 1)}
           onRetry={() => startRace()}
           onNext={() => {
@@ -607,7 +1030,12 @@ export const Block: React.FC<BlockProps> = (props) => {
             setCi(n);
             startRace(n);
           }}
-          onCups={toCups}
+          onCups={() => {
+            if (result.online) {
+              backToDemo();
+              setScreen("lobby");
+            } else toCups();
+          }}
         />
       )}
     </div>

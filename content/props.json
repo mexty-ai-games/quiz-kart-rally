@@ -19,9 +19,11 @@
     "fr": "Additions et soustractions jusqu'à 100"
    },
    "mood": "day",
+   "theme": "meadow",
    "ground": "#7fbf5a",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -80,6 +82,10 @@
    "boosts": [
     0.3,
     0.7
+   ],
+   "jumps": [
+    0.408,
+    0.587
    ],
    "questions": [
     {
@@ -407,9 +413,11 @@
     "fr": "Tables de multiplication jusqu'à 12"
    },
    "mood": "morning",
+   "theme": "hills",
    "ground": "#9fb85c",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -474,6 +482,10 @@
    "boosts": [
     0.38,
     0.78
+   ],
+   "jumps": [
+    0.231,
+    0.729
    ],
    "questions": [
     {
@@ -801,9 +813,11 @@
     "fr": "Partager et diviser"
    },
    "mood": "sunset",
+   "theme": "desert",
    "ground": "#d8b878",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -869,7 +883,11 @@
    ],
    "boosts": [
     0.25,
-    0.58
+    0.501
+   ],
+   "jumps": [
+    0.561,
+    0.725
    ],
    "questions": [
     {
@@ -1197,9 +1215,11 @@
     "fr": "Calculs mélangés : × et ÷ d'abord"
    },
    "mood": "night",
+   "theme": "night",
    "ground": "#3f6347",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -1268,8 +1288,12 @@
    ],
    "boosts": [
     0.2,
-    0.52,
+    0.414,
     0.8
+   ],
+   "jumps": [
+    0.474,
+    0.853
    ],
    "questions": [
     {
@@ -1691,6 +1715,14 @@
    "en": "Play",
    "fr": "Jouer"
   },
+  "playSolo": {
+   "en": "Solo race",
+   "fr": "Course solo"
+  },
+  "playOnline": {
+   "en": "Race online",
+   "fr": "Course en ligne"
+  },
   "howToPlay": {
    "en": "How to play",
    "fr": "Comment jouer"
@@ -1715,6 +1747,14 @@
    {
     "en": "Collect coins to go a little faster. Finish in the top 3 to win a trophy!",
     "fr": "Ramasse des pièces pour aller un peu plus vite. Termine dans les 3 premiers pour gagner une coupe !"
+   },
+   {
+    "en": "On a jump ramp, tap Drift while you fly to do a trick: you get a boost when you land.",
+    "fr": "Sur un tremplin, appuie sur Dérapage pendant le saut pour faire une figure : tu gagnes un boost à l'atterrissage."
+   },
+   {
+    "en": "Race online: join a quick race, type a friend's code, or create a race and share its code.",
+    "fr": "En ligne : rejoins une course rapide, tape le code d'un ami, ou crée une course et partage son code."
    }
   ],
   "controlsKeys": {
@@ -1760,6 +1800,10 @@
   "start": {
    "en": "Start!",
    "fr": "C'est parti !"
+  },
+  "getReady": {
+   "en": "Get ready!",
+   "fr": "Prépare-toi !"
   },
   "lap": {
    "en": "Lap",
@@ -1833,6 +1877,10 @@
    "en": "Bumped by a nova!",
    "fr": "Percuté par une nova !"
   },
+  "trick": {
+   "en": "Nice trick!",
+   "fr": "Belle figure !"
+  },
   "finish": {
    "en": "Finish!",
    "fr": "Arrivée !"
@@ -1861,13 +1909,25 @@
    "en": "Graphics",
    "fr": "Graphismes"
   },
+  "qualityAuto": {
+   "en": "Auto",
+   "fr": "Auto"
+  },
   "qualityLow": {
    "en": "Fast",
    "fr": "Rapide"
   },
+  "qualityMedium": {
+   "en": "Balanced",
+   "fr": "Équilibré"
+  },
   "qualityHigh": {
    "en": "Pretty",
    "fr": "Joli"
+  },
+  "qualityUltra": {
+   "en": "Ultra",
+   "fr": "Ultra"
   },
   "on": {
    "en": "On",
@@ -1941,8 +2001,156 @@
    {
     "en": "5th",
     "fr": "5e"
+   },
+   {
+    "en": "6th",
+    "fr": "6e"
+   },
+   {
+    "en": "7th",
+    "fr": "7e"
+   },
+   {
+    "en": "8th",
+    "fr": "8e"
    }
-  ]
+  ],
+  "quickRace": {
+   "en": "Quick race",
+   "fr": "Course rapide"
+  },
+  "quickRaceHint": {
+   "en": "Jump into a race with other players",
+   "fr": "Rejoins vite une course avec d'autres joueurs"
+  },
+  "joinWithCode": {
+   "en": "Join with a code",
+   "fr": "Rejoindre avec un code"
+  },
+  "createRace": {
+   "en": "Create a race",
+   "fr": "Créer une course"
+  },
+  "publicRace": {
+   "en": "Public",
+   "fr": "Publique"
+  },
+  "privateRace": {
+   "en": "Private",
+   "fr": "Privée"
+  },
+  "publicHint": {
+   "en": "Anyone can find it in the list of open races.",
+   "fr": "Tout le monde peut la trouver dans la liste des courses."
+  },
+  "privateHint": {
+   "en": "Friends join with your code or the QR code.",
+   "fr": "Tes amis rejoignent avec ton code ou le QR code."
+  },
+  "openRaces": {
+   "en": "Open races",
+   "fr": "Courses ouvertes"
+  },
+  "noOpenRaces": {
+   "en": "No open race right now: start a quick race!",
+   "fr": "Aucune course ouverte : lance une course rapide !"
+  },
+  "join": {
+   "en": "Join",
+   "fr": "Rejoindre"
+  },
+  "watch": {
+   "en": "Watch",
+   "fr": "Regarder"
+  },
+  "waiting": {
+   "en": "Waiting",
+   "fr": "En attente"
+  },
+  "racing": {
+   "en": "Racing",
+   "fr": "En course"
+  },
+  "enterCode": {
+   "en": "Type the 5-letter race code",
+   "fr": "Tape le code de la course (5 lettres)"
+  },
+  "codeNotFound": {
+   "en": "No race with this code. Check the letters and try again.",
+   "fr": "Aucune course avec ce code. Vérifie les lettres et réessaie."
+  },
+  "lobbyFull": {
+   "en": "This race is full. Try another one!",
+   "fr": "Cette course est complète. Essaie une autre !"
+  },
+  "connecting": {
+   "en": "Connecting…",
+   "fr": "Connexion…"
+  },
+  "onlineUnavailable": {
+   "en": "Online races can't connect right now. Try a solo race!",
+   "fr": "Les courses en ligne ne se connectent pas pour l'instant. Essaie une course solo !"
+  },
+  "leave": {
+   "en": "Leave",
+   "fr": "Quitter"
+  },
+  "players": {
+   "en": "Players",
+   "fr": "Joueurs"
+  },
+  "you": {
+   "en": "you",
+   "fr": "toi"
+  },
+  "hostTag": {
+   "en": "host",
+   "fr": "hôte"
+  },
+  "aiTag": {
+   "en": "AI",
+   "fr": "IA"
+  },
+  "waitingForHost": {
+   "en": "Waiting for the host to start…",
+   "fr": "On attend que l'hôte lance la course…"
+  },
+  "startRace": {
+   "en": "Start the race!",
+   "fr": "Lancer la course !"
+  },
+  "startsIn": {
+   "en": "Race starts in",
+   "fr": "Départ dans"
+  },
+  "aiFill": {
+   "en": "Free spot",
+   "fr": "Place libre"
+  },
+  "shareCode": {
+   "en": "Friends type this code in \"Join with a code\".",
+   "fr": "Tes amis tapent ce code dans « Rejoindre avec un code »."
+  },
+  "scanToJoin": {
+   "en": "Scan to join",
+   "fr": "Scanne pour rejoindre"
+  },
+  "watching": {
+   "en": "You're watching this race",
+   "fr": "Tu regardes cette course"
+  },
+  "nextRaceSoon": {
+   "en": "You'll race in the next one!",
+   "fr": "Tu cours à la prochaine !"
+  },
+  "backToLobby": {
+   "en": "Back to the lobby",
+   "fr": "Retour au salon"
+  },
+  "pickCup": {
+   "en": "Cup",
+   "fr": "Coupe"
+  }
  },
  "assets": {
   "karts": [
@@ -1952,20 +2160,241 @@
    "/models/kart_oopi.glb",
    "/models/kart_oozi.glb"
   ],
-  "itemBox": "/models/item_box.glb",
-  "banana": "/models/banana.glb",
-  "coin": "/models/coin.glb",
-  "cone": "/models/cone.glb",
-  "tree": "/models/tree.glb",
-  "treePine": "/models/tree_pine.glb",
-  "smoke": "/models/smoke.glb",
-  "debrisTire": "/models/debris_tire.glb",
-  "gantry": "/models/question_gantry.glb",
-  "startArch": "/models/start_arch.glb",
-  "boostPad": "/models/boost_pad.glb",
-  "tireWall": "/models/tire_wall.glb",
-  "grandstand": "/models/grandstand.glb",
-  "flag": "/models/flag.glb"
+  "models": [
+   {
+    "id": "arch_rock",
+    "url": "/models/arch_rock.glb"
+   },
+   {
+    "id": "balloon_cluster",
+    "url": "/models/balloon_cluster.glb"
+   },
+   {
+    "id": "banana",
+    "url": "/models/banana.glb"
+   },
+   {
+    "id": "barn",
+    "url": "/models/barn.glb"
+   },
+   {
+    "id": "barrier_block",
+    "url": "/models/barrier_block.glb"
+   },
+   {
+    "id": "boost_pad",
+    "url": "/models/boost_pad.glb"
+   },
+   {
+    "id": "boost_pad_v2",
+    "url": "/models/boost_pad_v2.glb"
+   },
+   {
+    "id": "building_a",
+    "url": "/models/building_a.glb"
+   },
+   {
+    "id": "building_b",
+    "url": "/models/building_b.glb"
+   },
+   {
+    "id": "building_c",
+    "url": "/models/building_c.glb"
+   },
+   {
+    "id": "bush_a",
+    "url": "/models/bush_a.glb"
+   },
+   {
+    "id": "bush_b",
+    "url": "/models/bush_b.glb"
+   },
+   {
+    "id": "cactus_a",
+    "url": "/models/cactus_a.glb"
+   },
+   {
+    "id": "cactus_b",
+    "url": "/models/cactus_b.glb"
+   },
+   {
+    "id": "cloud_a",
+    "url": "/models/cloud_a.glb"
+   },
+   {
+    "id": "cloud_b",
+    "url": "/models/cloud_b.glb"
+   },
+   {
+    "id": "coin",
+    "url": "/models/coin.glb"
+   },
+   {
+    "id": "cone",
+    "url": "/models/cone.glb"
+   },
+   {
+    "id": "cottage",
+    "url": "/models/cottage.glb"
+   },
+   {
+    "id": "crystal_cluster",
+    "url": "/models/crystal_cluster.glb"
+   },
+   {
+    "id": "debris_tire",
+    "url": "/models/debris_tire.glb"
+   },
+   {
+    "id": "desert_rock_a",
+    "url": "/models/desert_rock_a.glb"
+   },
+   {
+    "id": "desert_rock_b",
+    "url": "/models/desert_rock_b.glb"
+   },
+   {
+    "id": "fence_segment",
+    "url": "/models/fence_segment.glb"
+   },
+   {
+    "id": "finish_banner_post",
+    "url": "/models/finish_banner_post.glb"
+   },
+   {
+    "id": "flag",
+    "url": "/models/flag.glb"
+   },
+   {
+    "id": "flower_patch",
+    "url": "/models/flower_patch.glb"
+   },
+   {
+    "id": "gantry_v2",
+    "url": "/models/gantry_v2.glb"
+   },
+   {
+    "id": "grandstand",
+    "url": "/models/grandstand.glb"
+   },
+   {
+    "id": "grandstand_v2",
+    "url": "/models/grandstand_v2.glb"
+   },
+   {
+    "id": "hot_air_balloon",
+    "url": "/models/hot_air_balloon.glb"
+   },
+   {
+    "id": "item_box",
+    "url": "/models/item_box.glb"
+   },
+   {
+    "id": "item_box_v2",
+    "url": "/models/item_box_v2.glb"
+   },
+   {
+    "id": "jump_ramp",
+    "url": "/models/jump_ramp.glb"
+   },
+   {
+    "id": "lamp_post",
+    "url": "/models/lamp_post.glb"
+   },
+   {
+    "id": "mesa",
+    "url": "/models/mesa.glb"
+   },
+   {
+    "id": "neon_ring_cyan",
+    "url": "/models/neon_ring_cyan.glb"
+   },
+   {
+    "id": "neon_ring_pink",
+    "url": "/models/neon_ring_pink.glb"
+   },
+   {
+    "id": "palm",
+    "url": "/models/palm.glb"
+   },
+   {
+    "id": "pine_a",
+    "url": "/models/pine_a.glb"
+   },
+   {
+    "id": "pine_b",
+    "url": "/models/pine_b.glb"
+   },
+   {
+    "id": "pine_c",
+    "url": "/models/pine_c.glb"
+   },
+   {
+    "id": "podium",
+    "url": "/models/podium.glb"
+   },
+   {
+    "id": "question_gantry",
+    "url": "/models/question_gantry.glb"
+   },
+   {
+    "id": "rock_a",
+    "url": "/models/rock_a.glb"
+   },
+   {
+    "id": "rock_b",
+    "url": "/models/rock_b.glb"
+   },
+   {
+    "id": "rock_c",
+    "url": "/models/rock_c.glb"
+   },
+   {
+    "id": "smoke",
+    "url": "/models/smoke.glb"
+   },
+   {
+    "id": "start_arch",
+    "url": "/models/start_arch.glb"
+   },
+   {
+    "id": "start_arch_v2",
+    "url": "/models/start_arch_v2.glb"
+   },
+   {
+    "id": "tire_stack",
+    "url": "/models/tire_stack.glb"
+   },
+   {
+    "id": "tire_wall",
+    "url": "/models/tire_wall.glb"
+   },
+   {
+    "id": "tree",
+    "url": "/models/tree.glb"
+   },
+   {
+    "id": "tree_pine",
+    "url": "/models/tree_pine.glb"
+   },
+   {
+    "id": "tree_round_a",
+    "url": "/models/tree_round_a.glb"
+   },
+   {
+    "id": "tree_round_b",
+    "url": "/models/tree_round_b.glb"
+   },
+   {
+    "id": "trophy",
+    "url": "/models/trophy.glb"
+   },
+   {
+    "id": "windmill",
+    "url": "/models/windmill.glb"
+   }
+  ]
  },
- "boardPrefix": "cup"
+ "boardPrefix": "cup",
+ "joinLink": ""
 }

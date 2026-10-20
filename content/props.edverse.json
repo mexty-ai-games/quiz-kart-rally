@@ -19,9 +19,11 @@
     "fr": "Additions et soustractions jusqu'à 100"
    },
    "mood": "day",
+   "theme": "meadow",
    "ground": "#7fbf5a",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -80,6 +82,10 @@
    "boosts": [
     0.3,
     0.7
+   ],
+   "jumps": [
+    0.408,
+    0.587
    ],
    "questions": [
     {
@@ -407,9 +413,11 @@
     "fr": "Tables de multiplication jusqu'à 12"
    },
    "mood": "morning",
+   "theme": "hills",
    "ground": "#9fb85c",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -474,6 +482,10 @@
    "boosts": [
     0.38,
     0.78
+   ],
+   "jumps": [
+    0.231,
+    0.729
    ],
    "questions": [
     {
@@ -801,9 +813,11 @@
     "fr": "Partager et diviser"
    },
    "mood": "sunset",
+   "theme": "desert",
    "ground": "#d8b878",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -869,7 +883,11 @@
    ],
    "boosts": [
     0.25,
-    0.58
+    0.501
+   ],
+   "jumps": [
+    0.561,
+    0.725
    ],
    "questions": [
     {
@@ -1197,9 +1215,11 @@
     "fr": "Calculs mélangés : × et ÷ d'abord"
    },
    "mood": "night",
+   "theme": "night",
    "ground": "#3f6347",
    "laps": 3,
    "width": 16,
+   "bank": 9,
    "points": [
     {
      "x": 0,
@@ -1268,8 +1288,12 @@
    ],
    "boosts": [
     0.2,
-    0.52,
+    0.414,
     0.8
+   ],
+   "jumps": [
+    0.474,
+    0.853
    ],
    "questions": [
     {
@@ -1691,6 +1715,14 @@
    "en": "Play",
    "fr": "Jouer"
   },
+  "playSolo": {
+   "en": "Solo race",
+   "fr": "Course solo"
+  },
+  "playOnline": {
+   "en": "Race online",
+   "fr": "Course en ligne"
+  },
   "howToPlay": {
    "en": "How to play",
    "fr": "Comment jouer"
@@ -1715,6 +1747,14 @@
    {
     "en": "Collect coins to go a little faster. Finish in the top 3 to win a trophy!",
     "fr": "Ramasse des pièces pour aller un peu plus vite. Termine dans les 3 premiers pour gagner une coupe !"
+   },
+   {
+    "en": "On a jump ramp, tap Drift while you fly to do a trick: you get a boost when you land.",
+    "fr": "Sur un tremplin, appuie sur Dérapage pendant le saut pour faire une figure : tu gagnes un boost à l'atterrissage."
+   },
+   {
+    "en": "Race online: join a quick race, type a friend's code, or create a race and share its code.",
+    "fr": "En ligne : rejoins une course rapide, tape le code d'un ami, ou crée une course et partage son code."
    }
   ],
   "controlsKeys": {
@@ -1760,6 +1800,10 @@
   "start": {
    "en": "Start!",
    "fr": "C'est parti !"
+  },
+  "getReady": {
+   "en": "Get ready!",
+   "fr": "Prépare-toi !"
   },
   "lap": {
    "en": "Lap",
@@ -1833,6 +1877,10 @@
    "en": "Bumped by a nova!",
    "fr": "Percuté par une nova !"
   },
+  "trick": {
+   "en": "Nice trick!",
+   "fr": "Belle figure !"
+  },
   "finish": {
    "en": "Finish!",
    "fr": "Arrivée !"
@@ -1861,13 +1909,25 @@
    "en": "Graphics",
    "fr": "Graphismes"
   },
+  "qualityAuto": {
+   "en": "Auto",
+   "fr": "Auto"
+  },
   "qualityLow": {
    "en": "Fast",
    "fr": "Rapide"
   },
+  "qualityMedium": {
+   "en": "Balanced",
+   "fr": "Équilibré"
+  },
   "qualityHigh": {
    "en": "Pretty",
    "fr": "Joli"
+  },
+  "qualityUltra": {
+   "en": "Ultra",
+   "fr": "Ultra"
   },
   "on": {
    "en": "On",
@@ -1941,8 +2001,156 @@
    {
     "en": "5th",
     "fr": "5e"
+   },
+   {
+    "en": "6th",
+    "fr": "6e"
+   },
+   {
+    "en": "7th",
+    "fr": "7e"
+   },
+   {
+    "en": "8th",
+    "fr": "8e"
    }
-  ]
+  ],
+  "quickRace": {
+   "en": "Quick race",
+   "fr": "Course rapide"
+  },
+  "quickRaceHint": {
+   "en": "Jump into a race with other players",
+   "fr": "Rejoins vite une course avec d'autres joueurs"
+  },
+  "joinWithCode": {
+   "en": "Join with a code",
+   "fr": "Rejoindre avec un code"
+  },
+  "createRace": {
+   "en": "Create a race",
+   "fr": "Créer une course"
+  },
+  "publicRace": {
+   "en": "Public",
+   "fr": "Publique"
+  },
+  "privateRace": {
+   "en": "Private",
+   "fr": "Privée"
+  },
+  "publicHint": {
+   "en": "Anyone can find it in the list of open races.",
+   "fr": "Tout le monde peut la trouver dans la liste des courses."
+  },
+  "privateHint": {
+   "en": "Friends join with your code or the QR code.",
+   "fr": "Tes amis rejoignent avec ton code ou le QR code."
+  },
+  "openRaces": {
+   "en": "Open races",
+   "fr": "Courses ouvertes"
+  },
+  "noOpenRaces": {
+   "en": "No open race right now: start a quick race!",
+   "fr": "Aucune course ouverte : lance une course rapide !"
+  },
+  "join": {
+   "en": "Join",
+   "fr": "Rejoindre"
+  },
+  "watch": {
+   "en": "Watch",
+   "fr": "Regarder"
+  },
+  "waiting": {
+   "en": "Waiting",
+   "fr": "En attente"
+  },
+  "racing": {
+   "en": "Racing",
+   "fr": "En course"
+  },
+  "enterCode": {
+   "en": "Type the 5-letter race code",
+   "fr": "Tape le code de la course (5 lettres)"
+  },
+  "codeNotFound": {
+   "en": "No race with this code. Check the letters and try again.",
+   "fr": "Aucune course avec ce code. Vérifie les lettres et réessaie."
+  },
+  "lobbyFull": {
+   "en": "This race is full. Try another one!",
+   "fr": "Cette course est complète. Essaie une autre !"
+  },
+  "connecting": {
+   "en": "Connecting…",
+   "fr": "Connexion…"
+  },
+  "onlineUnavailable": {
+   "en": "Online races can't connect right now. Try a solo race!",
+   "fr": "Les courses en ligne ne se connectent pas pour l'instant. Essaie une course solo !"
+  },
+  "leave": {
+   "en": "Leave",
+   "fr": "Quitter"
+  },
+  "players": {
+   "en": "Players",
+   "fr": "Joueurs"
+  },
+  "you": {
+   "en": "you",
+   "fr": "toi"
+  },
+  "hostTag": {
+   "en": "host",
+   "fr": "hôte"
+  },
+  "aiTag": {
+   "en": "AI",
+   "fr": "IA"
+  },
+  "waitingForHost": {
+   "en": "Waiting for the host to start…",
+   "fr": "On attend que l'hôte lance la course…"
+  },
+  "startRace": {
+   "en": "Start the race!",
+   "fr": "Lancer la course !"
+  },
+  "startsIn": {
+   "en": "Race starts in",
+   "fr": "Départ dans"
+  },
+  "aiFill": {
+   "en": "Free spot",
+   "fr": "Place libre"
+  },
+  "shareCode": {
+   "en": "Friends type this code in \"Join with a code\".",
+   "fr": "Tes amis tapent ce code dans « Rejoindre avec un code »."
+  },
+  "scanToJoin": {
+   "en": "Scan to join",
+   "fr": "Scanne pour rejoindre"
+  },
+  "watching": {
+   "en": "You're watching this race",
+   "fr": "Tu regardes cette course"
+  },
+  "nextRaceSoon": {
+   "en": "You'll race in the next one!",
+   "fr": "Tu cours à la prochaine !"
+  },
+  "backToLobby": {
+   "en": "Back to the lobby",
+   "fr": "Retour au salon"
+  },
+  "pickCup": {
+   "en": "Cup",
+   "fr": "Coupe"
+  }
  },
  "assets": {
   "karts": [
@@ -1952,20 +2160,241 @@
    "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/b912f8db-8c34-4319-a4e8-cd85260514ab.glb",
    "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/97b6eb72-b0f9-4501-aa9a-0fcf69627b9a.glb"
   ],
-  "itemBox": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/935726c1-8910-4091-bca1-3257c349ee37.glb",
-  "banana": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/db871306-ebce-414e-8a0b-f9b0b2003017.glb",
-  "coin": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/a8645239-499b-4950-a0fa-5c5aff6abe72.glb",
-  "cone": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/dbc1f0a4-28e8-4029-8cd7-1ecb4a68bb7e.glb",
-  "tree": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/5527521f-6e99-4d62-95e3-c10204654641.glb",
-  "treePine": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/88dbd7c1-be9b-4d05-aa8b-0b2d7955ad45.glb",
-  "smoke": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/bf2821c8-a26a-4329-a02b-7c33a5f994a3.glb",
-  "debrisTire": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/b0f94f22-a323-4d04-a84e-cecb8becf2e0.glb",
-  "gantry": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/cabde680-be3e-4fae-9b02-e1fb05283348.glb",
-  "startArch": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/3e93c445-a79f-423a-b090-afa724554b3b.glb",
-  "boostPad": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/21f32a92-6147-4f9a-83cd-d53bd05e12fc.glb",
-  "tireWall": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/8b145f85-14c8-45d7-8c16-a7c83c08726e.glb",
-  "grandstand": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/decbbbb6-3821-4266-ae6e-64a7a121f7c6.glb",
-  "flag": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/85a6f2ec-daa4-4ed4-a616-4bf7aa13880f.glb"
+  "models": [
+   {
+    "id": "arch_rock",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/bb729421-fcf1-42aa-a268-6b3818ae0357.glb"
+   },
+   {
+    "id": "balloon_cluster",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/7c7ce73f-43a1-487f-a0d0-d95ef42382da.glb"
+   },
+   {
+    "id": "banana",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/db871306-ebce-414e-8a0b-f9b0b2003017.glb"
+   },
+   {
+    "id": "barn",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/388faf71-9826-4127-9cf4-883fd5cae447.glb"
+   },
+   {
+    "id": "barrier_block",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/6f1d4b6e-91a8-44c1-9501-69c1de1c9a4d.glb"
+   },
+   {
+    "id": "boost_pad",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/21f32a92-6147-4f9a-83cd-d53bd05e12fc.glb"
+   },
+   {
+    "id": "boost_pad_v2",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/9f7af6e1-2ba4-4dd5-b6b1-cedc400a3b85.glb"
+   },
+   {
+    "id": "building_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/d8c1e54a-f600-4937-a2f1-45ae109ff3e2.glb"
+   },
+   {
+    "id": "building_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/92b9d1fa-8a97-4cbc-b9c4-810e2f4ad35a.glb"
+   },
+   {
+    "id": "building_c",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/c16e01b0-21b0-4e77-9c71-864760e87d64.glb"
+   },
+   {
+    "id": "bush_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/4bb79fb1-e058-415e-844c-6afc2fb6775e.glb"
+   },
+   {
+    "id": "bush_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/04b28a18-113b-4958-8378-b5512f7fd91d.glb"
+   },
+   {
+    "id": "cactus_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/adebfd68-02e7-448f-851a-e086a64613a8.glb"
+   },
+   {
+    "id": "cactus_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/07a9c63b-eefa-45db-bcbc-45f815c406df.glb"
+   },
+   {
+    "id": "cloud_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/55033efb-2901-4bfb-a0b8-6d4f8936573a.glb"
+   },
+   {
+    "id": "cloud_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/fbec2511-a42e-4e2f-a6a3-4fc1495740fb.glb"
+   },
+   {
+    "id": "coin",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/a8645239-499b-4950-a0fa-5c5aff6abe72.glb"
+   },
+   {
+    "id": "cone",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/dbc1f0a4-28e8-4029-8cd7-1ecb4a68bb7e.glb"
+   },
+   {
+    "id": "cottage",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/39e46502-722c-422b-b862-347085575673.glb"
+   },
+   {
+    "id": "crystal_cluster",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/d26c2425-30c0-4f82-a206-57da934af69b.glb"
+   },
+   {
+    "id": "debris_tire",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/b0f94f22-a323-4d04-a84e-cecb8becf2e0.glb"
+   },
+   {
+    "id": "desert_rock_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/585208c2-b58a-4bac-831f-dd859f4d6dd0.glb"
+   },
+   {
+    "id": "desert_rock_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/a093d5b8-b61e-4f0d-8238-2a33816eaae0.glb"
+   },
+   {
+    "id": "fence_segment",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/0f2d163d-8181-40de-8a80-127f29b93bcf.glb"
+   },
+   {
+    "id": "finish_banner_post",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/98196a81-4860-46d9-a0f3-b6c13cdeb264.glb"
+   },
+   {
+    "id": "flag",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/85a6f2ec-daa4-4ed4-a616-4bf7aa13880f.glb"
+   },
+   {
+    "id": "flower_patch",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/3f636d1c-1d00-46b9-a10e-1b1b4010f35b.glb"
+   },
+   {
+    "id": "gantry_v2",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/51fefc94-f0e1-49a0-806b-675706b410d3.glb"
+   },
+   {
+    "id": "grandstand",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/decbbbb6-3821-4266-ae6e-64a7a121f7c6.glb"
+   },
+   {
+    "id": "grandstand_v2",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/96cb62a9-8108-4290-946f-3257fd3c0c56.glb"
+   },
+   {
+    "id": "hot_air_balloon",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/fbc8b6b3-84ce-4a89-bcc0-cd94fe1d9ea0.glb"
+   },
+   {
+    "id": "item_box",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/935726c1-8910-4091-bca1-3257c349ee37.glb"
+   },
+   {
+    "id": "item_box_v2",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/fa0d8561-d938-4829-975d-55883324c8cc.glb"
+   },
+   {
+    "id": "jump_ramp",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/b94779ee-6ab9-4bbc-83da-1da56a55d7e0.glb"
+   },
+   {
+    "id": "lamp_post",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/bc87f87d-afa3-4645-a603-65ce82977ed2.glb"
+   },
+   {
+    "id": "mesa",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/f160f7f3-8d4a-47cd-85ce-4cbde6745f89.glb"
+   },
+   {
+    "id": "neon_ring_cyan",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/d7a4063c-79a3-4d93-b69b-1c2a3d4289a8.glb"
+   },
+   {
+    "id": "neon_ring_pink",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/07076bd2-1791-466b-9a5e-65dcf5b75e45.glb"
+   },
+   {
+    "id": "palm",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/3dea27f2-bbfc-4128-95b6-31ecc391308e.glb"
+   },
+   {
+    "id": "pine_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/d9e9adee-f137-45b9-a89d-6039fccfe60e.glb"
+   },
+   {
+    "id": "pine_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/fc07dbec-6399-443f-95c5-62b7cb4df8db.glb"
+   },
+   {
+    "id": "pine_c",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/9b0e5caa-719a-4ad2-a417-0b2c32ab220f.glb"
+   },
+   {
+    "id": "podium",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/9ae5e3e4-f8f7-440b-94d8-defbb868fa92.glb"
+   },
+   {
+    "id": "question_gantry",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/cabde680-be3e-4fae-9b02-e1fb05283348.glb"
+   },
+   {
+    "id": "rock_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/ac1cbeb1-881d-4ecd-95a1-1f4fb2cc5320.glb"
+   },
+   {
+    "id": "rock_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/8b16985d-733e-4cf6-839e-09ebb2618e41.glb"
+   },
+   {
+    "id": "rock_c",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/2f884de4-2543-4cf4-908a-11198ebf6098.glb"
+   },
+   {
+    "id": "smoke",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/bf2821c8-a26a-4329-a02b-7c33a5f994a3.glb"
+   },
+   {
+    "id": "start_arch",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/3e93c445-a79f-423a-b090-afa724554b3b.glb"
+   },
+   {
+    "id": "start_arch_v2",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/a305defb-7e1b-4165-98d7-657f33369ed1.glb"
+   },
+   {
+    "id": "tire_stack",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/b48fb92b-4ac6-41a4-a7db-923d0ce57eff.glb"
+   },
+   {
+    "id": "tire_wall",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/8b145f85-14c8-45d7-8c16-a7c83c08726e.glb"
+   },
+   {
+    "id": "tree",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/5527521f-6e99-4d62-95e3-c10204654641.glb"
+   },
+   {
+    "id": "tree_pine",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/88dbd7c1-be9b-4d05-aa8b-0b2d7955ad45.glb"
+   },
+   {
+    "id": "tree_round_a",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/4bbffc7e-8a96-4d21-817c-cddf89e9992d.glb"
+   },
+   {
+    "id": "tree_round_b",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/bb92a4ab-c22e-4a2d-b783-8456e76ae08c.glb"
+   },
+   {
+    "id": "trophy",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/7f4a0bff-2d55-46ec-a22f-6f050ee2b038.glb"
+   },
+   {
+    "id": "windmill",
+    "url": "https://content.mext.app/uploads/direct/6a1d470c4d0fe4fcf83e6987/ec66a327-b25d-4811-8b64-5870473be92a.glb"
+   }
+  ]
  },
- "boardPrefix": "cup"
+ "boardPrefix": "cup",
+ "joinLink": ""
 }

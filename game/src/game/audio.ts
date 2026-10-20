@@ -6,6 +6,25 @@ type Wave = OscillatorType;
 
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
+interface Song {
+  bpm: number;
+  chords: number[][];
+  lead: number[];
+  bass: OscillatorType;
+  leadWave: OscillatorType;
+}
+// Original little tunes (one per cup theme), written for this game.
+const SONGS: Song[] = [
+  // meadow: sunny C major bounce
+  { bpm: 132, chords: [[60, 64, 67], [57, 60, 64], [65, 69, 72], [67, 71, 74]], lead: [76, 0, 79, 0, 81, 79, 76, 0, 74, 0, 76, 0, 72, 0, 0, 0], bass: "triangle", leadWave: "square" },
+  // hills: bright D major, a bit faster
+  { bpm: 140, chords: [[62, 66, 69], [59, 62, 66], [67, 71, 74], [69, 73, 76]], lead: [78, 0, 76, 74, 0, 74, 76, 0, 81, 0, 78, 0, 76, 0, 74, 0], bass: "triangle", leadWave: "triangle" },
+  // desert: A minor with a sunny turn
+  { bpm: 128, chords: [[57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 56, 59]], lead: [76, 0, 77, 76, 0, 74, 72, 0, 74, 0, 71, 0, 72, 0, 0, 0], bass: "sawtooth", leadWave: "square" },
+  // night: driving E minor synth
+  { bpm: 148, chords: [[64, 67, 71], [60, 64, 67], [62, 66, 69], [59, 62, 66]], lead: [83, 0, 81, 0, 79, 0, 78, 79, 0, 78, 76, 0, 74, 0, 76, 0], bass: "sawtooth", leadWave: "sawtooth" },
+];
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -219,6 +238,33 @@ export class Sfx {
     this.tone(NOTE(91), 0.03, { type: "sine", vol: 0.03 });
   }
 
+  jump() {
+    this.tone(330, 0.18, { type: "triangle", vol: 0.16, slide: 1.8 });
+    this.noise(0.18, { vol: 0.12, from: 600, to: 2400 });
+  }
+  trick() {
+    this.tone(NOTE(84), 0.09, { type: "square", vol: 0.12 });
+    this.tone(NOTE(88), 0.09, { type: "square", vol: 0.12, at: 0.07 });
+    this.tone(NOTE(91), 0.16, { type: "square", vol: 0.12, at: 0.14 });
+    this.noise(0.25, { vol: 0.1, from: 3000, to: 8000, q: 0.8 });
+  }
+  land(s: number) {
+    this.tone(90, 0.16, { type: "sine", vol: 0.2 + s * 0.25, slide: 0.5 });
+    this.noise(0.14, { vol: 0.08 + s * 0.12, from: 400, to: 160 });
+  }
+  boxBreak() {
+    this.noise(0.12, { vol: 0.16, from: 4000, to: 9000, q: 2 });
+    this.tone(NOTE(96), 0.08, { type: "triangle", vol: 0.1 });
+  }
+  cheer() {
+    this.noise(1.6, { vol: 0.12, from: 900, to: 1600, q: 0.6 });
+    [72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), 0.22, { type: "square", vol: 0.1, at: i * 0.12, bus: "music" }));
+  }
+  firework() {
+    this.noise(0.5, { vol: 0.12, from: 200, to: 60, q: 0.7 });
+    this.tone(NOTE(100 + Math.floor(Math.random() * 6)), 0.3, { type: "sine", vol: 0.04, slide: 0.6, at: 0.05 });
+  }
+
   // ---------------------------------------------------------------- music
   /** A cheerful 4-bar loop (bass + arpeggio), scheduled ahead with a small timer. */
   music(on: boolean) {
@@ -231,28 +277,64 @@ export class Sfx {
     this.musicTimer = window.setInterval(() => this.schedule(), 60);
   }
 
+  /** One song per cup theme (tempo, chords, lead), a little faster on the final lap. */
+  private style = 0;
+  private hurry = 1;
+  setTheme(theme: string) {
+    this.style = Math.max(0, ["meadow", "hills", "desert", "night"].indexOf(theme));
+  }
+  setHurry(on: boolean) {
+    this.hurry = on ? 1.08 : 1;
+  }
+
   private schedule() {
     const c = this.ctx;
     if (!c || !this.musicOn) return;
-    const spb = 60 / 132 / 2; // eighth notes at 132 bpm
-    const chords = [
-      [60, 64, 67],
-      [57, 60, 64],
-      [65, 69, 72],
-      [67, 71, 74],
-    ];
+    const S = SONGS[this.style] || SONGS[0];
+    const spb = 60 / (S.bpm * this.hurry) / 2; // eighth notes
     while (this.nextBeat < c.currentTime + 0.3) {
       const b = this.beat;
-      const bar = Math.floor(b / 8) % 4;
-      const ch = chords[bar];
+      const bar = Math.floor(b / 8) % S.chords.length;
+      const ch = S.chords[bar];
       const at = this.nextBeat - c.currentTime;
-      if (b % 2 === 0) this.tone(NOTE(ch[0] - 24 + (b % 4 === 2 ? 12 : 0)), spb * 1.6, { type: "triangle", vol: 0.5, at, bus: "music" });
+      // bass: root / octave bounce
+      if (b % 2 === 0) this.tone(NOTE(ch[0] - 24 + (b % 4 === 2 ? 12 : 0)), spb * 1.6, { type: S.bass, vol: 0.45, at, bus: "music" });
+      // arpeggio
       const arp = ch[(b * 2) % 3] + (b % 8 >= 4 ? 12 : 0);
-      this.tone(NOTE(arp + 12), spb * 0.9, { type: "square", vol: 0.12, at, bus: "music" });
-      if (b % 4 === 0) this.noiseHat(at);
+      this.tone(NOTE(arp + 12), spb * 0.85, { type: "square", vol: 0.07, at, bus: "music" });
+      // lead melody (one note per eighth, 0 = rest), every other 4 bars
+      const li = b % S.lead.length;
+      const n = S.lead[li];
+      if (n && Math.floor(b / 32) % 2 === 1) this.tone(NOTE(n), spb * 1.7, { type: S.leadWave, vol: 0.1, at, bus: "music" });
+      // drums: kick on beats, snare on the backbeat, hats on eighths
+      if (b % 4 === 0) this.kick(at);
+      if (b % 8 === 4) this.snare(at);
+      if (b % 2 === 1) this.noiseHat(at);
       this.nextBeat += spb;
       this.beat++;
     }
+  }
+
+  private kick(at: number) {
+    this.tone(150, 0.16, { type: "sine", vol: 0.55, at, slide: 0.3, bus: "music" });
+  }
+  private snare(at: number) {
+    const c = this.ctx;
+    if (!c || !this.musicBus || !this.noiseBuf) return;
+    const t = c.currentTime + at;
+    const src = c.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = c.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 1800;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    src.connect(f);
+    f.connect(g);
+    g.connect(this.musicBus);
+    src.start(t);
+    src.stop(t + 0.15);
   }
 
   private noiseHat(at: number) {

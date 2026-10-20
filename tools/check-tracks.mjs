@@ -35,6 +35,23 @@ for (const [id, t] of Object.entries(tracks)) {
     if (rows.length === 3) break;
   }
   rows.sort();
+  // jump ramps: straight 45 m before the lip and 45 m after (landing), well away from rows and the start
+  const jscore = i => { let s = 0; for (let k = -45; k <= 45; k++) s += Math.abs(curv[(i + k + N) % N]); return s; };
+  const jc = [];
+  for (let i = 0; i < N; i += 2) jc.push([jscore(i), i]);
+  jc.sort((a, b) => a[0] - b[0]);
+  const jumps = [];
+  const gap = (a, b) => Math.min(Math.abs(a - b), 1 - Math.abs(a - b));
+  for (const [sc, i] of jc) {
+    const f = i / N;
+    if (f < 0.16 || f > 0.9) continue;
+    if (sc > 1.2) break;
+    if (rows.some(r => gap(r, f) * L < 75)) continue;
+    if (jumps.some(j => gap(j, f) * L < 160)) continue;
+    jumps.push(f);
+    if (jumps.length === 2) break;
+  }
+  jumps.sort();
   const tight = [];
   for (let i = 0; i < N; i++) if (1 / Math.max(1e-6, Math.abs(curv[i])) < 24) {
     let best = 0, bd = Infinity; pts.forEach((q, k) => { const d = Math.hypot(q.x - P[i].x, q.z - P[i].z); if (d < bd) { bd = d; best = k; } });
@@ -43,5 +60,5 @@ for (const [id, t] of Object.entries(tracks)) {
   if (tight.length) console.log(`   tight near control points ${JSON.stringify(tight)}`);
   const ys = pts.map(p => p.y);
   const ok = minR >= 22 && minClear >= 2 * (HALF + VERGE) + 4;
-  console.log(`${ok ? 'OK ' : 'BAD'} ${id}: L=${L.toFixed(0)}m minR=${minR.toFixed(1)}m clear=${minClear.toFixed(1)}m @${where} ymax=${Math.max(...ys)} rows=${JSON.stringify(rows.map(r => +r.toFixed(3)))}`);
+  console.log(`${ok ? 'OK ' : 'BAD'} ${id}: L=${L.toFixed(0)}m minR=${minR.toFixed(1)}m clear=${minClear.toFixed(1)}m @${where} ymax=${Math.max(...ys)} rows=${JSON.stringify(rows.map(r => +r.toFixed(3)))} jumps=${JSON.stringify(jumps.map(r => +r.toFixed(3)))}`);
 }

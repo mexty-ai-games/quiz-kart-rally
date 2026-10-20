@@ -1,25 +1,31 @@
 /**
- * Quiz Kart Rally engine: renderer, cup world, five karts (player + four rivals), the race
- * (countdown, laps, positions), answer rows (question → boxes → bonus or spin-out), bonuses,
- * coins, boost pads and peels, camera and effects. React drives it through a small API and
- * receives HUD snapshots and race events through callbacks.
+ * Quiz Kart Rally engine: renderer, cup world, karts, the race (intro flyover, countdown, laps,
+ * positions), answer rows (question → boxes → bonus or spin-out), bonuses, coins, boost pads,
+ * jumps, peels, camera and effects. Works solo (player + AI) and online (player + remote karts,
+ * AI run by the lobby host). React drives it through a small API and receives HUD snapshots
+ * and race events through callbacks.
  */
 import * as THREE from "three";
-import { buildTrack, BuiltTrack, deltaS, sampleAt, wrapS } from "./track";
-import { Kart, KartInput, KartEvents, newKartEvents, collideKarts, VMAX, COIN_MAX } from "./kart";
+import { buildTrack, BuiltTrack, deltaS, sampleAt, wrapS, pointAt, locate } from "./track";
+import { Kart, KartInput, KartEvents, newKartEvents, resetKartEvents, collideKarts, Bumpable, VMAX, COIN_MAX } from "./kart";
 import { Driver } from "./ai";
 import { Kit } from "./assets";
 import { buildWorld, layoutRow, WorldVis } from "./world";
-import { Sky, MOODS, Mood } from "./sky";
+import { Sky, MOODS, Mood, skyEnvironment } from "./sky";
 import { Fx } from "./fx";
+import { Skids } from "./skids";
 import { Sfx } from "./audio";
 import { Input } from "./input";
-import { drawAnswer, drawScreen, nameTag, laneColor, AnswerState } from "./labels";
+import { drawAnswer, drawScreen, laneColor, AnswerState } from "./labels";
 import { BonusId, rollBonus, BONUS_COLOR } from "./items";
+import { Renderer, Tier, TIER_DEFS } from "./render";
+import { CameraRig } from "./camera";
+import { KartView } from "./kartview";
+import { THEMES, themeFor } from "./themes";
 import type { Cup } from "./types";
 
-export type Phase = "demo" | "countdown" | "racing" | "finished";
-export type Quality = "low" | "high";
+export type Phase = "demo" | "intro" | "countdown" | "racing" | "finished" | "podium";
+export type { Tier };
 
 export interface RaceTexts {
   questionTitle: string;
@@ -28,7 +34,6 @@ export interface RaceTexts {
   answers: string[][];
   correct: number[];
   explains: string[];
-  racerNames: string[];
 }
 
 export interface HudQuestion {
@@ -36,6 +41,13 @@ export interface HudQuestion {
   /** answers in lane order, left → right, with their lane colour */
   lanes: { text: string; color: string }[];
   dist: number;
+}
+
+export interface HudRacer {
+  id: string;
+  name: string;
+  color: string;
+  me: boolean;
 }
 
 export interface HudState {
@@ -57,16 +69,21 @@ export interface HudState {
   nova: boolean;
   boost: boolean;
   spin: boolean;
+  air: boolean;
   drift: 0 | 1 | 2 | 3;
   map: { player: [number, number]; rivals: { x: number; z: number; color: string }[] };
+  order: HudRacer[];
   finished: boolean;
+  spectating: boolean;
 }
 
 export interface Standing {
+  id: string;
   name: string;
   player: boolean;
   timeMs: number;
   color: string;
+  kart: number;
 }
 
 export interface RaceResult {
@@ -89,48 +106,78 @@ export type RaceEvent =
   | { type: "bonus"; id: BonusId }
   | { type: "used"; id: BonusId }
   | { type: "hit"; by: "peel" | "nova" }
-  | { type: "finish"; result: RaceResult };
+  | { type: "trick" }
+  | { type: "finish"; result: RaceResult }
+  | { type: "botFinish"; id: string; ms: number };
 
-export interface RacerDef {
+export type RacerKind = "player" | "ai" | "remote";
+export interface RacerSpec {
+  id: string;
+  kind: RacerKind;
   kart: number; // index in kit.karts
   name: string;
   color: string;
+}
+
+export interface RaceSetup {
+  cup: Cup;
+  texts: RaceTexts;
+  grid: RacerSpec[];
+  seed: number;
+  laps: number;
+  mode: "solo" | "online" | "demo";
+  /** online: host-clock time (ms) of GO */
+  startAt?: number;
+  raceId?: number;
+  /** online: this client runs the AI karts */
+  host?: boolean;
+}
+
+/** Network hooks (online races). */
+export interface NetPort {
+  now: () => number;
+  send: (m: any, reliable: boolean) => void;
 }
 
 const STEP = 1 / 120;
 const MAX_FRAME_DT = 0.05;
 const HUD_MS = 50;
 const ROLL_T = 1.15;
+const NET_MS = 66; // ~15 Hz kart states
+const INTERP_MS = 110;
+const INTRO_S = 3.4;
+const COUNT_S = 3;
 const UP = new THREE.Vector3(0, 1, 0);
-const KART_COLORS = ["#8c78ff", "#ff7aa2", "#ffb02e", "#3fd6b8", "#f5f0e6"];
 
 interface RowState {
-  /** question index for the current lap of the player */
   q: number;
-  /** lane → answer index */
   order: number[];
   correctLane: number;
   centers: number[];
-  /** lap the shown question belongs to (player lap) */
   lap: number;
   feedbackT: number;
   pickedLane: number;
 }
 
-interface KartView {
-  root: THREE.Group;
-  body: THREE.Object3D;
-  wheelsF: THREE.Object3D[];
-  wheelsB: THREE.Object3D[];
-  character: THREE.Object3D | null;
-  shield: THREE.Mesh;
-  tag: THREE.Sprite | null;
+interface Snap {
+  h: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  sp: number;
+  f: number;
+  lap: number;
+  s: number;
+  c: number;
+  dt: number;
 }
 
 interface Racer {
+  spec: RacerSpec;
+  kind: RacerKind;
   kart: Kart;
   view: KartView;
-  def: RacerDef;
   driver: Driver | null;
   prevS: number;
   bonus: BonusId | null;
@@ -138,26 +185,65 @@ interface Racer {
   rollT: number;
   rolled: BonusId;
   aiUseT: number;
+  ev: KartEvents;
+  snaps: Snap[];
+  netProgress: number;
+  sparkT: number;
 }
 
 interface Peel {
+  id: string;
   obj: THREE.Object3D;
   p: THREE.Vector3;
-  owner: number;
+  owner: string;
   t: number;
 }
 
+// seeded random numbers (questions, lane orders: the same for everyone in an online race)
+function mulberry(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+export function shuffle<T>(a: T[], rnd: () => number = Math.random): T[] {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
+function hashStr(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+const FLAG = { drift: 1, right: 2, boost: 4, spin: 8, shield: 16, nova: 32, air: 64, trick: 128, done: 256 };
+
 export class Engine {
-  renderer: THREE.WebGLRenderer;
+  r: Renderer;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(62, 1, 0.3, 3000);
+  rig: CameraRig;
   sky = new Sky();
   sun = new THREE.DirectionalLight("#ffffff", 2.6);
   hemi = new THREE.HemisphereLight("#cfe4ff", "#5d7a3a", 1);
   fx = new Fx();
+  skids = new Skids();
   input = new Input();
 
   cup: Cup | null = null;
+  setup: RaceSetup | null = null;
   track: BuiltTrack | null = null;
   world: WorldVis | null = null;
   texts: RaceTexts | null = null;
@@ -165,65 +251,59 @@ export class Engine {
   player: Racer | null = null;
   rows: RowState[] = [];
   peels: Peel[] = [];
+  net: NetPort | null = null;
 
   phase: Phase = "demo";
   paused = false;
   laps = 3;
-  count = 3;
-  private countT = 0;
+  count = 4;
+  private phaseT = 0;
   private raceT = 0;
   private acc = 0;
   private qOrder: number[] = [];
-  private qCursor = 0;
   private asked = 0;
   private answered = 0;
   private correct = 0;
   private finishT = -1;
   private resultSent = false;
   private lastHud = 0;
-  private camPos = new THREE.Vector3();
-  private camLook = new THREE.Vector3();
-  private camYaw = 0;
-  private demoT = 0;
+  private lastNet = 0;
   private running = true;
   private raf = 0;
   private last = 0;
   private background = false;
-  private frameMs: number[] = [];
-  private scale = 1;
-  private kev: KartEvents = newKartEvents();
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
   private mtx = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private coinSpin = 0;
   private lastQuestionRow = -1;
+  private time = 0;
+  private envTex: THREE.Texture | null = null;
+  private bloom = 0.9;
+  private peelSeq = 0;
+  private spectateIdx = 0;
   hudOn = false;
-  /** demo camera: follow this racer instead of the leader (racer select screen) */
+  /** demo camera: follow this racer (racer select screen) */
   focus: number | null = null;
-  quality: Quality;
 
   onHud: (h: HudState) => void = () => {};
   onEvent: (e: RaceEvent) => void = () => {};
 
-  constructor(private canvas: HTMLCanvasElement, public kit: Kit, quality: Quality, public sfx: Sfx, opts: { scale?: number } = {}) {
-    this.quality = quality;
-    this.scale = opts.scale ?? 1;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: quality === "high", powerPreference: "high-performance" });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.scene.add(this.sky.mesh, this.sun, this.sun.target, this.hemi, this.fx.points);
-    this.sun.shadow.mapSize.set(1024, 1024);
+  constructor(private canvas: HTMLCanvasElement, public kit: Kit, tier: Tier, public sfx: Sfx) {
+    this.r = new Renderer(canvas, tier, this.scene, this.camera);
+    this.rig = new CameraRig(this.camera);
+    this.r.onTierChange = () => this.applyTier();
+    this.scene.add(this.sky.mesh, this.sun, this.sun.target, this.hemi, this.skids.mesh);
+    this.fx.objects.forEach((o) => this.scene.add(o));
     const sc = this.sun.shadow.camera;
-    sc.left = sc.bottom = -45;
-    sc.right = sc.top = 45;
+    sc.left = sc.bottom = -55;
+    sc.right = sc.top = 55;
     sc.near = 1;
-    sc.far = 260;
-    this.sun.shadow.bias = -0.0008;
+    sc.far = 300;
+    this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.04;
-    this.applyQuality();
+    this.applyTier();
     this.input.attach();
     this.resize();
     window.addEventListener("resize", this.resize);
@@ -231,44 +311,47 @@ export class Engine {
     this.loop();
   }
 
-  // ---------------------------------------------------------------- setup
-  private applyQuality() {
-    const hi = this.quality === "high";
-    this.renderer.shadowMap.enabled = hi;
-    this.sun.castShadow = hi;
-    this.sky.setDetail(hi ? 5 : 3);
-    this.fx.budget = hi ? 1 : 0.5;
-    this.setPixelRatio();
+  get tier(): Tier {
+    return this.r.tier;
   }
 
-  setQuality(q: Quality) {
-    if (q === this.quality) return;
-    this.quality = q;
-    this.applyQuality();
+  // ---------------------------------------------------------------- setup
+  private applyTier() {
+    const d = TIER_DEFS[this.r.tier];
+    this.sun.castShadow = d.shadows > 0;
+    if (d.shadows > 0) {
+      this.sun.shadow.mapSize.set(d.shadows, d.shadows);
+      if (this.sun.shadow.map) {
+        this.sun.shadow.map.dispose();
+        (this.sun.shadow as any).map = null;
+      }
+    }
+    this.sky.setDetail(d.skyOct);
+    this.fx.budget = d.particles;
+    this.camera.far = d.far + 600;
+    this.camera.updateProjectionMatrix();
+    this.racers.forEach((r) => r.view.setShadowCasting(d.shadows > 0));
     // materials must recompile for the shadow change
     this.scene.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
       if (!m) return;
       (Array.isArray(m) ? m : [m]).forEach((x) => (x.needsUpdate = true));
     });
+    this.resize();
   }
 
-  private setPixelRatio() {
-    const dpr = Math.min(window.devicePixelRatio || 1, this.quality === "high" ? 1.75 : 1.25);
-    this.renderer.setPixelRatio(dpr * this.scale);
+  setTier(t: Tier, auto = false) {
+    this.r.autoTier = auto;
+    this.r.setTier(t);
   }
 
   resize = () => {
     const c = this.canvas;
     const w = c.clientWidth || window.innerWidth;
     const h = c.clientHeight || window.innerHeight;
-    this.setPixelRatio();
-    this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / Math.max(1, h);
-    // narrow portrait screens: widen the view so the road and boxes stay visible
-    this.camera.fov = this.camera.aspect < 1 ? 78 : 62;
-    this.camera.updateProjectionMatrix();
-    this.fx.setViewport(h * this.renderer.getPixelRatio());
+    this.r.resize(w, h);
+    this.rig.setAspect(w / Math.max(1, h));
+    this.fx.setViewport(h * this.r.gl.getPixelRatio());
   };
 
   setBackground(b: boolean) {
@@ -276,117 +359,116 @@ export class Engine {
   }
 
   /** Builds the cup's world and puts the karts on the grid. */
-  loadCup(cup: Cup, texts: RaceTexts, racers: RacerDef[], playerIndex: number, demo: boolean) {
-    this.clearCup();
+  load(setup: RaceSetup) {
+    this.clear();
+    const cup = setup.cup;
+    this.setup = setup;
     this.cup = cup;
-    this.texts = texts;
-    this.laps = Math.max(1, Math.min(5, cup.laps ?? 3));
+    this.texts = setup.texts;
+    this.laps = Math.max(1, Math.min(5, setup.laps));
     const track = buildTrack(cup);
     this.track = track;
     const mood: Mood = (cup.mood as Mood) in MOODS ? (cup.mood as Mood) : "day";
     const md = MOODS[mood];
+    const themeId = themeFor(cup.theme, cup.mood);
+    const theme = THEMES[themeId];
+    this.sfx.setTheme(themeId);
+    this.sfx.setHurry(false);
     this.sky.apply(md);
     this.sun.color.set(md.sunColor);
-    this.sun.intensity = md.sunIntensity * 0.9;
+    this.sun.intensity = md.sunIntensity * 0.95;
     this.hemi.color.set(md.hemiSky);
     this.hemi.groundColor.set(md.hemiGround);
-    this.hemi.intensity = md.hemiIntensity * 1.1;
-    this.renderer.toneMappingExposure = md.exposure;
-    this.scene.fog = new THREE.Fog(new THREE.Color(md.horizon), 180, 900);
-    this.world = buildWorld(track, this.kit, { ground: cup.ground || "#7fb85a", seed: hashStr(cup.id), quality: this.quality });
+    this.hemi.intensity = md.hemiIntensity * 1.05;
+    this.r.setExposure(md.exposure);
+    this.bloom = theme.bloom;
+    const d = TIER_DEFS[this.r.tier];
+    this.scene.fog = new THREE.Fog(new THREE.Color(md.horizon), 220, d.far);
+    // image-based light from the sky for nicer metals and paint
+    if (this.envTex) this.envTex.dispose();
+    this.envTex = null;
+    if (this.r.tier === "ultra" || this.r.tier === "high") {
+      try {
+        this.envTex = skyEnvironment(this.r.gl, this.sky);
+        this.scene.environment = this.envTex;
+        (this.scene as any).environmentIntensity = 0.45;
+      } catch {
+        this.scene.environment = null;
+      }
+    } else this.scene.environment = null;
+    this.world = buildWorld(track, this.kit, { theme, seed: hashStr(cup.id), scatter: d.scatter, shadows: d.shadows > 0, sunDir: this.sky.sunDir, skyColor: md.horizon, reach: { low: 0.5, medium: 0.72, high: 0.9, ultra: 1 }[this.r.tier] });
     this.scene.add(this.world.root);
 
-    // racers
-    const n = Math.min(5, racers.length);
+    // racers in grid order (slot 0 = pole)
     this.racers = [];
-    for (let i = 0; i < n; i++) {
-      const def = racers[i];
+    this.player = null;
+    setup.grid.slice(0, 8).forEach((spec, i) => {
       const kart = new Kart(track, i);
-      const view = this.makeKartView(def, i !== playerIndex || demo);
+      const tag = spec.kind !== "player";
+      const view = new KartView(this.kit.karts[spec.kart] || this.kit.karts[0], spec.color, tag ? spec.name : null);
+      view.setShadowCasting(d.shadows > 0);
+      view.glowLevel = mood === "night" ? 0.9 : mood === "sunset" ? 0.55 : 0.4;
       this.scene.add(view.root);
-      const isPlayer = i === playerIndex && !demo;
+      const local = spec.kind === "ai" && (setup.mode !== "online" || setup.host);
       const r: Racer = {
+        spec,
+        kind: spec.kind === "ai" && !local ? "remote" : spec.kind,
         kart,
         view,
-        def,
-        driver: isPlayer ? null : new Driver(kart, [0.35, 0.55, 0.75, 0.9, 0.6][i % 5]),
+        driver: spec.kind === "ai" && local ? new Driver(kart, [0.35, 0.55, 0.75, 0.9, 0.6, 0.5, 0.7, 0.45][i % 8]) : null,
         prevS: 0,
         bonus: null,
         charges: 0,
         rollT: 0,
         rolled: "turbo",
         aiUseT: 0,
+        ev: newKartEvents(),
+        snaps: [],
+        netProgress: 0,
+        sparkT: 0,
       };
       this.racers.push(r);
-      if (isPlayer) this.player = r;
-    }
-    if (demo) this.player = null;
-    this.qOrder = shuffle(Array.from({ length: Math.max(1, cup.questions ? cup.questions.length : 1) }, (_, k) => k));
-    this.qCursor = 0;
-    this.resetRace(demo ? "demo" : "countdown");
+      if (spec.kind === "player") this.player = r;
+    });
+    const nQ = Math.max(1, cup.questions ? cup.questions.length : 1);
+    this.qOrder = shuffle(
+      Array.from({ length: nQ }, (_, k) => k),
+      mulberry(setup.seed || 1)
+    );
+    this.resetRace();
   }
 
-  private clearCup() {
+  /** Background race behind the menus (all AI, orbit camera). */
+  loadDemo(cup: Cup, texts: RaceTexts, grid: RacerSpec[]) {
+    this.load({ cup, texts, grid: grid.map((g) => ({ ...g, kind: "ai" as RacerKind })), seed: 7, laps: 99, mode: "demo" });
+  }
+
+  private clear() {
     if (this.world) {
       this.scene.remove(this.world.root);
       this.world.dispose();
       this.world = null;
     }
-    this.racers.forEach((r) => this.scene.remove(r.view.root));
+    this.racers.forEach((r) => {
+      this.scene.remove(r.view.root);
+      r.view.dispose();
+    });
     this.racers = [];
     this.peels.forEach((p) => this.scene.remove(p.obj));
     this.peels = [];
     this.player = null;
     this.fx.clear();
-  }
-
-  private makeKartView(def: RacerDef, tag: boolean): KartView {
-    const root = new THREE.Group();
-    const body = new THREE.Group();
-    root.add(body);
-    const src = this.kit.karts[def.kart] || this.kit.karts[0];
-    const wheelsF: THREE.Object3D[] = [];
-    const wheelsB: THREE.Object3D[] = [];
-    let character: THREE.Object3D | null = null;
-    if (src) {
-      const m = src.clone(true);
-      // the Kenney karts face +Z; our forward is -Z
-      m.rotation.y = Math.PI;
-      m.traverse((o) => {
-        const nm = o.name.toLowerCase();
-        if (nm.indexOf("wheel-front") === 0) wheelsF.push(o);
-        else if (nm.indexOf("wheel-back") === 0) wheelsB.push(o);
-        else if (nm === "character") character = o;
-      });
-      body.add(m);
-    } else {
-      const fb = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 2.4), new THREE.MeshStandardMaterial({ color: def.color }));
-      fb.position.y = 0.5;
-      body.add(fb);
-    }
-    const shield = new THREE.Mesh(
-      new THREE.SphereGeometry(1.75, 20, 14),
-      new THREE.MeshStandardMaterial({ color: "#5fd0ff", emissive: "#2aa8ff", emissiveIntensity: 0.6, transparent: true, opacity: 0.28, depthWrite: false })
-    );
-    shield.position.y = 1.0;
-    shield.visible = false;
-    root.add(shield);
-    let t: THREE.Sprite | null = null;
-    if (tag) {
-      t = nameTag(def.name, def.color);
-      t.position.y = 3.1;
-      root.add(t);
-    }
-    return { root, body, wheelsF, wheelsB, character, shield, tag: t };
+    this.skids.clear();
   }
 
   /** Grid positions, questions and counters back to the start. */
-  resetRace(phase: Phase) {
+  resetRace() {
     const T = this.track;
-    if (!T) return;
-    this.phase = phase;
+    const st = this.setup;
+    if (!T || !st) return;
+    this.phase = st.mode === "demo" ? "demo" : "intro";
+    this.phaseT = 0;
     this.count = 4;
-    this.countT = 0;
     this.raceT = 0;
     this.acc = 0;
     this.asked = this.answered = this.correct = 0;
@@ -396,15 +478,7 @@ export class Engine {
     this.peels.forEach((p) => this.scene.remove(p.obj));
     this.peels = [];
     const hw = T.halfW;
-    // the player starts 4th of 5 in a staggered grid behind the line
-    const slots = this.racers.map((_, i) => i);
-    if (this.player) {
-      const pi = this.racers.indexOf(this.player);
-      slots.splice(slots.indexOf(pi), 1);
-      slots.splice(Math.min(3, slots.length), 0, pi);
-    }
-    slots.forEach((ri, k) => {
-      const r = this.racers[ri];
+    this.racers.forEach((r, k) => {
       r.kart.reset(T.length - 7 - k * 5.5, (k % 2 ? 1 : -1) * hw * 0.42);
       r.kart.lap = -1;
       r.kart.halfway = true;
@@ -413,21 +487,30 @@ export class Engine {
       r.charges = 0;
       r.rollT = 0;
       r.aiUseT = 0;
+      r.snaps = [];
+      r.netProgress = r.kart.progress();
       if (r.driver) r.driver.target = null;
     });
-    this.rows = T.rows.map((row) => ({ q: 0, order: [], correctLane: 0, centers: [], lap: -99, feedbackT: 0, pickedLane: -1 }));
+    this.rows = T.rows.map(() => ({ q: 0, order: [], correctLane: 0, centers: [], lap: -99, feedbackT: 0, pickedLane: -1 }));
     T.rows.forEach((_, k) => this.assignRow(k, 0));
-    this.world?.coins.hidden.forEach((_, k, a) => (a[k] = 0));
+    if (this.world) this.world.coins.hidden.forEach((_, k, a) => (a[k] = 0));
     this.setLamps(0);
-    this.snapCamera();
+    const focus = this.camTarget();
+    if (focus) {
+      if (st.mode === "demo") {
+        this.rig.mode = "orbit";
+        this.rig.snap(focus);
+      } else this.rig.startIntro(T, focus, INTRO_S);
+    }
+    if (this.world && this.world.podium && this.world.podium.trophy) this.world.podium.trophy.visible = false;
   }
 
   // ---------------------------------------------------------------- rows
-  private nextQuestion(): number {
-    const q = this.qOrder[this.qCursor % this.qOrder.length];
-    this.qCursor++;
-    if (this.qCursor % this.qOrder.length === 0) this.qOrder = shuffle(this.qOrder.slice());
-    return q;
+  /** The question a row shows on a given lap: the same for every player of an online race. */
+  private questionFor(row: number, lap: number) {
+    const R = Math.max(1, this.track ? this.track.rows.length : 1);
+    const n = this.qOrder.length;
+    return this.qOrder[(((Math.max(0, lap) * R + row) % n) + n) % n];
   }
 
   private assignRow(k: number, lap: number) {
@@ -435,20 +518,23 @@ export class Engine {
     const cup = this.cup!;
     const rs = this.rows[k];
     rs.lap = lap;
-    rs.q = this.nextQuestion();
+    rs.q = this.questionFor(k, lap);
     const qd = cup.questions && cup.questions[rs.q];
     const nAns = qd ? Math.max(2, Math.min(4, qd.answers ? qd.answers.length : 2)) : 2;
-    rs.order = shuffle(Array.from({ length: nAns }, (_, i) => i));
+    rs.order = shuffle(
+      Array.from({ length: nAns }, (_, i) => i),
+      mulberry((this.setup ? this.setup.seed : 1) + lap * 977 + k * 131)
+    );
     const right = this.texts ? this.texts.correct[rs.q] : 0;
     rs.correctLane = Math.max(0, rs.order.indexOf(right));
     rs.feedbackT = 0;
     rs.pickedLane = -1;
-    if (this.world) rs.centers = layoutRow(T, this.world.rows[k], T.rows[k].s, nAns);
+    if (this.world) rs.centers = layoutRow(T, this.world.rows[k], T.rows[k].s, nAns, this.world.boxV2);
     this.drawRow(k);
   }
 
   private drawRow(k: number) {
-    const vis = this.world?.rows[k];
+    const vis = this.world && this.world.rows[k];
     const rs = this.rows[k];
     const tx = this.texts;
     if (!vis || !tx) return;
@@ -466,22 +552,22 @@ export class Engine {
   }
 
   /** Language changed: redraw every in-world text. */
-  relabel(texts: RaceTexts) {
+  relabel(texts: RaceTexts, names: { [id: string]: string }) {
     this.texts = texts;
     this.rows.forEach((_, k) => this.drawRow(k));
-    this.racers.forEach((r, i) => {
-      if (!r.view.tag) return;
-      r.view.root.remove(r.view.tag);
-      r.def.name = texts.racerNames[i] ?? r.def.name;
-      r.view.tag = nameTag(r.def.name, r.def.color);
-      r.view.tag.position.y = 3.1;
-      r.view.root.add(r.view.tag);
+    this.racers.forEach((r) => {
+      const n = names[r.spec.id];
+      if (n && n !== r.spec.name) {
+        r.spec.name = n;
+        r.view.setTag(n, r.spec.color);
+      }
     });
   }
 
   // ---------------------------------------------------------------- controls from React
   setPaused(p: boolean) {
-    this.paused = p;
+    // online races never pause (the others keep racing); the menu just covers the screen
+    this.paused = p && (!this.setup || this.setup.mode !== "online");
     if (p) this.sfx.engine(0, false, false);
   }
 
@@ -497,7 +583,7 @@ export class Engine {
     const k = r.kart;
     switch (id) {
       case "turbo":
-        k.boostT = Math.max(k.boostT, 1.4);
+        k.boostT = Math.max(k.boostT, 1.5);
         r.bonus = null;
         if (isPlayer) this.sfx.boost();
         break;
@@ -521,7 +607,7 @@ export class Engine {
         k.coins = Math.min(COIN_MAX, k.coins + 5);
         r.bonus = null;
         if (isPlayer) this.sfx.coin();
-        this.fx.emit(18, this.tmp.copy(k.p).setY(k.p.y + 1.6), { color: ["#ffd23a", "#fff1a8"], speed: 3, up: 4 });
+        this.fx.emit(18, this.tmp.copy(k.p).setY(k.p.y + 1.6), { color: ["#ffd23a", "#fff1a8"], speed: 3, up: 4, add: true });
         break;
       case "nova":
         k.novaT = 6.5;
@@ -535,17 +621,105 @@ export class Engine {
 
   private dropPeel(r: Racer) {
     const k = r.kart;
-    const f = k.forward;
-    const p = k.p.clone().addScaledVector(f, -2.8);
+    const p = k.p.clone().addScaledVector(k.forward, -2.8);
+    const id = `${r.spec.id}:${this.peelSeq++}`;
+    this.addPeel(id, p, r.spec.id);
+    if (this.net && this.setup) this.net.send({ t: "ev", r: this.setup.raceId, k: "peel", id, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), o: r.spec.id }, true);
+  }
+  private addPeel(id: string, p: THREE.Vector3, owner: string) {
     const src = this.kit.models.banana;
     const obj = src ? src.clone(true) : new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: "#ffd23a" }));
     obj.position.copy(p);
     obj.rotation.y = Math.random() * 6;
     this.scene.add(obj);
-    this.peels.push({ obj, p, owner: this.racers.indexOf(r), t: 0 });
-    if (this.peels.length > 12) {
+    this.peels.push({ id, obj, p: p.clone(), owner, t: 0 });
+    if (this.peels.length > 16) {
       const old = this.peels.shift()!;
       this.scene.remove(old.obj);
+    }
+  }
+  private removePeel(id: string) {
+    for (let i = this.peels.length - 1; i >= 0; i--)
+      if (this.peels[i].id === id) {
+        this.scene.remove(this.peels[i].obj);
+        this.peels.splice(i, 1);
+      }
+  }
+
+  // ---------------------------------------------------------------- network in
+  /** A message from another player of the online race. */
+  applyNet(from: string, m: any) {
+    const st = this.setup;
+    if (!st || st.mode !== "online" || m.r !== st.raceId) return;
+    if (m.t === "st") this.pushSnap(from, m.h, m.k);
+    else if (m.t === "bots" && Array.isArray(m.b)) m.b.forEach((b: any[]) => this.pushSnap(String(b[0]), m.h, b.slice(1)));
+    else if (m.t === "ev") {
+      if (m.k === "peel") this.addPeel(String(m.id), new THREE.Vector3(m.x, m.y, m.z), String(m.o));
+      else if (m.k === "peelGone") this.removePeel(String(m.id));
+    }
+  }
+  private pushSnap(id: string, h: number, k: number[]) {
+    const r = this.racers.find((x) => x.spec.id === id);
+    if (!r || r.kind !== "remote" || !k || k.length < 9) return;
+    const s: Snap = { h, x: k[0] / 100, y: k[1] / 100, z: k[2] / 100, yaw: k[3] / 1000, sp: k[4] / 10, f: k[5], lap: k[6], s: k[7] / 10, c: k[8], dt: (k[9] || 0) / 10 };
+    const sn = r.snaps;
+    if (sn.length && h <= sn[sn.length - 1].h) return;
+    sn.push(s);
+    if (sn.length > 30) sn.shift();
+    r.netProgress = s.lap * (this.track ? this.track.length : 1) + s.s;
+  }
+  /** The host left: this client now drives the AI karts from where they are. */
+  takeOverBots() {
+    if (!this.setup || this.setup.mode !== "online") return;
+    this.setup.host = true;
+    this.racers.forEach((r, i) => {
+      if (r.kind === "remote" && r.spec.kind === "ai") {
+        r.kind = "ai";
+        r.driver = new Driver(r.kart, [0.35, 0.55, 0.75, 0.9, 0.6, 0.5, 0.7, 0.45][i % 8]);
+        const last = r.snaps[r.snaps.length - 1];
+        if (last) {
+          r.kart.p.set(last.x, last.y, last.z);
+          r.kart.yaw = last.yaw;
+          r.kart.speed = last.sp;
+          r.kart.lap = last.lap;
+        }
+      }
+    });
+  }
+  /** A remote player left the race: their kart disappears. */
+  dropRacer(id: string) {
+    const i = this.racers.findIndex((r) => r.spec.id === id && r.kind === "remote" && r.spec.kind !== "ai");
+    if (i < 0) return;
+    const r = this.racers[i];
+    this.scene.remove(r.view.root);
+    r.view.dispose();
+    this.racers.splice(i, 1);
+  }
+
+  private encode(r: Racer): number[] {
+    const k = r.kart;
+    let f = 0;
+    if (k.drifting) f |= FLAG.drift;
+    if (k.driftDir > 0) f |= FLAG.right;
+    if (k.boostT > 0) f |= FLAG.boost;
+    if (k.spinT > 0) f |= FLAG.spin;
+    if (k.shieldT > 0) f |= FLAG.shield;
+    if (k.novaT > 0) f |= FLAG.nova;
+    if (k.air) f |= FLAG.air;
+    if (k.trickT > 0) f |= FLAG.trick;
+    if (k.finished) f |= FLAG.done;
+    return [Math.round(k.p.x * 100), Math.round(k.p.y * 100), Math.round(k.p.z * 100), Math.round(k.yaw * 1000), Math.round(k.speed * 10), f, k.lap, Math.round(k.s * 10), k.coins, Math.round(k.driftT * 10)];
+  }
+  private netOut() {
+    const net = this.net;
+    const st = this.setup;
+    if (!net || !st || st.mode !== "online") return;
+    if (this.phase !== "racing" && this.phase !== "finished" && this.phase !== "countdown") return;
+    const h = net.now();
+    if (this.player) net.send({ t: "st", r: st.raceId, h, k: this.encode(this.player) }, false);
+    if (st.host) {
+      const b = this.racers.filter((r) => r.kind === "ai").map((r) => [r.spec.id].concat(this.encode(r) as any));
+      if (b.length) net.send({ t: "bots", r: st.raceId, h, b }, false);
     }
   }
 
@@ -557,36 +731,48 @@ export class Engine {
     let dt = (now - this.last) / 1000;
     this.last = now;
     if (dt > MAX_FRAME_DT) dt = MAX_FRAME_DT;
-    if (this.background && (Math.floor(now / 16.7) % 2 === 1)) return; // half rate behind menus
+    if (this.background && Math.floor(now / 16.7) % 2 === 1) return; // half rate behind menus
     this.frame(dt);
-    this.governor(dt * 1000);
+    this.r.governor(dt * 1000, !this.background && this.phase !== "demo");
   };
 
-  /** One rendered frame (also callable headless for tests). */
+  /** One rendered frame. */
   frame(dt: number) {
+    this.time += dt;
     if (!this.track) {
-      this.renderer.render(this.scene, this.camera);
+      this.r.render(dt);
       return;
     }
     if (!this.paused) {
       this.acc += dt;
+      // online races must keep up with real time even on slow devices (catch up to 0.25 s per frame)
+      const cap = this.setup && this.setup.mode === "online" ? 30 : 8;
       let steps = 0;
-      while (this.acc >= STEP && steps < 8) {
+      while (this.acc >= STEP && steps < cap) {
         this.tick(STEP);
         this.acc -= STEP;
         steps++;
       }
-      if (steps === 8) this.acc = 0;
+      if (steps === cap) this.acc = 0;
       this.animate(dt);
       this.fx.update(dt);
+      this.skids.update(dt);
     }
     this.updateCamera(dt);
     this.sky.mat.uniforms.time.value += dt;
-    this.renderer.render(this.scene, this.camera);
+    const k = this.camTarget();
+    const sp = k ? Math.max(0, k.speed) / VMAX : 0;
+    const chase = this.rig.mode === "chase";
+    this.r.setLook({ speed: chase ? Math.max(0, sp - 0.98) * 2.5 + (k && k.boostT > 0 ? 0.75 : 0) : 0, boost: chase && k && k.boostT > 0 ? 1 : 0, time: this.time, bloom: this.bloom });
+    this.r.render(dt);
     const t = performance.now();
     if (this.hudOn && t - this.lastHud > HUD_MS) {
       this.lastHud = t;
       this.emitHud();
+    }
+    if (t - this.lastNet > NET_MS) {
+      this.lastNet = t;
+      this.netOut();
     }
   }
 
@@ -598,75 +784,90 @@ export class Engine {
       for (let k = 0; k < 4; k++) this.tick(1 / 120);
       this.animate(1 / 30);
       this.fx.update(1 / 30);
+      this.skids.update(1 / 30);
+      this.updateCamera(1 / 30);
       if (this.resultSent) break;
     }
-    this.snapCamera();
   }
 
   get done() {
     return this.resultSent;
   }
 
-  private governor(ms: number) {
-    this.frameMs.push(ms);
-    if (this.frameMs.length < 90) return;
-    const avg = this.frameMs.reduce((a, b) => a + b, 0) / this.frameMs.length;
-    this.frameMs = [];
-    if (avg > 26 && this.scale > 0.55) {
-      this.scale = Math.max(0.55, this.scale - 0.15);
-      this.setPixelRatio();
-    } else if (avg < 17 && this.scale < 1) {
-      this.scale = Math.min(1, this.scale + 0.1);
-      this.setPixelRatio();
-    }
+  /** Seconds to GO (online: from the host clock). */
+  private toGo(): number {
+    const st = this.setup!;
+    if (st.mode === "online" && this.net && st.startAt) return (st.startAt - this.net.now()) / 1000;
+    if (this.phase === "intro") return INTRO_S - this.phaseT + COUNT_S;
+    if (this.phase === "countdown") return COUNT_S - this.phaseT;
+    return 0;
   }
 
   // ---------------------------------------------------------------- simulation
   private tick(dt: number) {
     const T = this.track!;
-    if (this.phase === "countdown") {
-      this.countT += dt;
-      const c = 3 - Math.floor(this.countT / 0.85);
-      if (c !== this.count) {
-        this.count = c;
-        if (c > 0) {
-          this.sfx.countBeep();
-          this.setLamps(4 - c);
-        } else {
+    const st = this.setup!;
+    this.phaseT += dt;
+    if (this.phase === "podium") return; // the winners stand still on the podium
+    if (this.phase === "intro" || this.phase === "countdown") {
+      const toGo = this.toGo();
+      if (this.phase === "intro" && (toGo <= COUNT_S || (st.mode !== "online" && this.phaseT >= INTRO_S))) {
+        this.phase = "countdown";
+        this.phaseT = 0;
+        const f = this.camTarget();
+        if (f && this.rig.mode === "intro") {
+          this.rig.mode = "chase";
+          this.rig.snap(f);
+        }
+      }
+      if (this.phase === "countdown") {
+        const left = this.toGo();
+        const c = Math.max(0, Math.ceil(left));
+        if (c !== this.count && c <= 3) {
+          this.count = c;
+          if (c > 0) {
+            this.sfx.countBeep();
+            this.setLamps(4 - c);
+          }
+        }
+        if (left <= 0) {
           this.phase = "racing";
+          this.phaseT = 0;
+          this.count = 0;
+          this.raceT = st.mode === "online" ? Math.max(0, -left) : 0;
           this.setLamps(5);
           this.sfx.go();
           this.onEvent({ type: "go" });
           window.setTimeout(() => this.setLamps(0), 1200);
         }
       }
+      // remote karts still show on the grid
       return;
     }
-    if (this.phase === "racing" || this.phase === "finished") this.raceT += dt;
-    const playerProg = this.player ? this.player.kart.progress() : this.leaderProgress();
-    const inputs: KartInput[] = this.racers.map((r) => {
-      if (r === this.player && !r.kart.finished) {
-        if (this.phase !== "racing") return { throttle: 0, brake: 0, steer: 0, drift: false };
-        return this.input.read();
-      }
-      return r.driver ? r.driver.drive(T, dt, playerProg) : { throttle: 0, brake: 0, steer: 0, drift: false };
-    });
-    this.racers.forEach((r, i) => {
+    if (this.phase === "racing" || this.phase === "finished") {
+      if (st.mode === "online" && this.net && st.startAt) this.raceT = Math.max(this.raceT, (this.net.now() - st.startAt) / 1000);
+      else this.raceT += dt;
+    }
+    const lead = this.player ? this.player.kart.progress() : this.leaderProgress();
+    const humans = st.mode === "online" ? Math.max(lead, this.humanLead()) : lead;
+    const bumpers: Bumpable[] = [];
+    const bumpOwners: Racer[] = [];
+    this.racers.forEach((r) => {
       const k = r.kart;
-      const ev = this.kev;
-      ev.wall = 0;
-      ev.miniTurbo = 0;
-      ev.driftStart = false;
-      r.prevS = k.s;
-      k.step(dt, inputs[i], ev);
-      if (r === this.player) {
-        if (ev.wall > 0.15) this.sfx.wall(ev.wall);
-        if (ev.miniTurbo) {
-          this.sfx.miniTurbo(ev.miniTurbo);
-          this.fx.emit(16, this.tmp.copy(k.p).setY(k.p.y + 0.5), { color: ev.miniTurbo === 2 ? ["#ff8a1e", "#ffd23a"] : ["#4fc3ff", "#bfefff"], speed: 4, up: 2, dir: k.forward.multiplyScalar(-1) });
-        }
-        if (ev.driftStart) this.sfx.driftStart();
+      if (r.kind === "remote") {
+        bumpers.push({ p: k.p, speed: k.speed, novaT: k.novaT, movable: false });
+        bumpOwners.push(r);
+        return;
       }
+      let inp: KartInput;
+      if (r === this.player && !k.finished) inp = this.phase === "racing" ? this.input.read() : { throttle: 0, brake: 0, steer: 0, drift: false };
+      else if (r.driver) inp = r.driver.drive(T, dt, humans);
+      else inp = { throttle: 0, brake: 0, steer: 0, drift: false };
+      const ev = r.ev;
+      resetKartEvents(ev);
+      r.prevS = k.s;
+      k.step(dt, inp, ev);
+      this.kartEvents(r, ev);
       this.lapLogic(r);
       this.rowLogic(r);
       this.pickups(r);
@@ -683,7 +884,7 @@ export class Engine {
           } else r.aiUseT = 0.8 + Math.random() * 3;
         }
       }
-      // rivals use their bonus after a short think
+      // AI use their bonus after a short think
       if (r !== this.player && r.bonus && r.aiUseT > 0) {
         r.aiUseT -= dt;
         if (r.aiUseT <= 0) {
@@ -691,40 +892,98 @@ export class Engine {
           if (r.bonus) r.aiUseT = 0.6;
         }
       }
+      bumpers.push({ p: k.p, speed: k.speed, novaT: k.novaT, movable: true });
+      bumpOwners.push(r);
     });
-    collideKarts(
-      this.racers.map((r) => r.kart),
-      (a, b, s) => {
-        if (a.novaT > 0 && b.novaT <= 0) this.knock(b, "nova");
-        else if (b.novaT > 0 && a.novaT <= 0) this.knock(a, "nova");
-        if (this.player && (a === this.player.kart || b === this.player.kart)) this.sfx.bump(s);
+    collideKarts(bumpers, (a, b, s) => {
+      const A = bumpOwners[a],
+        B = bumpOwners[b];
+      if (A.kart.novaT > 0 && B.kart.novaT <= 0 && B.kind !== "remote") this.knock(B, "nova");
+      else if (B.kart.novaT > 0 && A.kart.novaT <= 0 && A.kind !== "remote") this.knock(A, "nova");
+      if (this.player && (A === this.player || B === this.player)) {
+        this.sfx.bump(s);
+        this.rig.shake(s * 0.5);
       }
-    );
+    });
+    // write back speeds changed by bumps
+    bumpers.forEach((bp, i) => {
+      if (bp.movable) bumpOwners[i].kart.speed = bp.speed;
+    });
     this.peelLogic(dt);
-    // finish: wait a moment for the rivals, then report
+    // finish: wait a moment for the rivals, then report (solo)
     if (this.phase === "finished" && !this.resultSent) {
       this.finishT += dt;
       const allIn = this.racers.every((r) => r.kart.finished);
-      if (this.finishT > 4.5 || allIn) this.sendResult();
+      if (st.mode !== "online" && (this.finishT > 4.5 || allIn)) this.sendResult();
     }
   }
 
-  private leaderProgress() {
+  private humanLead() {
     let m = -Infinity;
-    this.racers.forEach((r) => (m = Math.max(m, r.kart.progress())));
+    this.racers.forEach((r) => {
+      if (r.spec.kind !== "ai") m = Math.max(m, this.progressOf(r));
+    });
     return m;
   }
+  private leaderProgress() {
+    let m = -Infinity;
+    this.racers.forEach((r) => (m = Math.max(m, this.progressOf(r))));
+    return m;
+  }
+  progressOf(r: Racer) {
+    return r.kind === "remote" ? r.netProgress : r.kart.progress();
+  }
+  /** Progress (m) of a racer by id, for the host's ranking of unfinished karts. */
+  progressById(id: string) {
+    const r = this.racers.find((x) => x.spec.id === id);
+    return r ? this.progressOf(r) : -1e9;
+  }
 
-  private knock(k: Kart, by: "peel" | "nova") {
+  private kartEvents(r: Racer, ev: KartEvents) {
+    const k = r.kart;
+    const me = r === this.player;
+    if (ev.miniTurbo) {
+      if (me) this.sfx.miniTurbo(ev.miniTurbo);
+      this.fx.emit(18, this.tmp.copy(k.p).setY(k.p.y + 0.5), { color: ev.miniTurbo === 2 ? ["#ff8a1e", "#ffd23a"] : ["#4fc3ff", "#bfefff"], speed: 4, up: 2, dir: k.forward.multiplyScalar(-1), add: true });
+    }
+    if (ev.driftStart && me) this.sfx.driftStart();
+    if (ev.wall > 0.15 && me) {
+      this.sfx.wall(ev.wall);
+      this.rig.shake(ev.wall * 0.6);
+    }
+    if (ev.jump && me) this.sfx.jump();
+    if (ev.trick) {
+      if (me) {
+        this.sfx.trick();
+        this.onEvent({ type: "trick" });
+      }
+      this.fx.emit(14, this.tmp.copy(k.p).setY(k.p.y + 1.2), { color: ["#ffffff", "#ffd23a", "#8ce8ff"], speed: 5, up: 3, grav: 2, add: true });
+    }
+    if (ev.land > 0) {
+      if (me) {
+        this.sfx.land(ev.land);
+        this.rig.shake(ev.land * 0.45);
+      }
+      this.fx.emit(10 + Math.round(ev.land * 14), this.tmp.copy(k.p).setY(k.p.y + 0.2), { color: ["#d8d2e6", "#b8b0c8"], speed: 4, up: 1.4, grav: 2, size: 0.6, life: 0.6, drag: 3 });
+    }
+    if (ev.trickBoost) {
+      if (me) this.sfx.boost();
+      this.fx.emit(16, this.tmp.copy(k.p).setY(k.p.y + 0.6), { color: ["#ff8a1e", "#ffd23a", "#ffffff"], speed: 4, up: 2, dir: k.forward.multiplyScalar(-1), add: true });
+    }
+  }
+
+  private knock(r: Racer, by: "peel" | "nova") {
+    const k = r.kart;
     if (k.shieldT > 0) {
       k.shieldT = 0;
-      if (this.player && k === this.player.kart) this.sfx.shieldPop();
+      if (r === this.player) this.sfx.shieldPop();
       return;
     }
     if (k.spinOut(1.1)) {
-      this.fx.emit(14, this.tmp.copy(k.p).setY(k.p.y + 1.8), { color: ["#ffe45c", "#ffffff"], speed: 3, up: 3, grav: 3 });
-      if (this.player && k === this.player.kart) {
+      this.fx.emit(14, this.tmp.copy(k.p).setY(k.p.y + 1.8), { color: ["#ffe45c", "#ffffff"], speed: 3, up: 3, grav: 3, add: true });
+      if (r === this.player) {
         this.sfx.spin();
+        this.rig.shake(0.5);
         this.onEvent({ type: "hit", by });
       }
     }
@@ -743,8 +1002,12 @@ export class Engine {
           k.finished = true;
           k.finishMs = this.raceT * 1000;
           if (r === this.player) this.playerFinished();
+          else if (r.kind === "ai" && this.setup && this.setup.mode === "online") this.onEvent({ type: "botFinish", id: r.spec.id, ms: k.finishMs });
         } else if (r === this.player && k.lap > 0) {
-          if (k.lap === this.laps - 1) this.sfx.finalLap();
+          if (k.lap === this.laps - 1) {
+            this.sfx.finalLap();
+            this.sfx.setHurry(true);
+          }
           else this.sfx.lap();
           this.onEvent({ type: "lap", lap: k.lap + 1, laps: this.laps });
         }
@@ -764,54 +1027,60 @@ export class Engine {
     const pos = this.positionOf(this.player!);
     this.sfx.finish(pos <= 3);
     const p = this.player!;
+    this.fx.emit(60, this.tmp.copy(p.kart.p).setY(p.kart.p.y + 3), { color: ["#ff5fa8", "#ffd23a", "#4fc3ff", "#7ee05a", "#ffffff"], speed: 8, up: 9, grav: 6, life: 1.6, size: 0.4 });
     // the player's kart drives itself to the end of the lap
     p.driver = new Driver(p.kart, 0.6);
+    if (this.setup && this.setup.mode === "online") {
+      // online: report right away; the host ranks everyone
+      this.resultSent = true;
+      this.onEvent({ type: "finish", result: this.localResult() });
+    }
   }
 
   private positionOf(r: Racer) {
-    const order = this.standings();
-    return order.indexOf(r) + 1;
+    return this.standings().indexOf(r) + 1;
   }
 
   /** Racers in race order. */
   standings(): Racer[] {
     return this.racers.slice().sort((a, b) => {
-      if (a.kart.finished && b.kart.finished) return a.kart.finishMs - b.kart.finishMs;
-      if (a.kart.finished) return -1;
-      if (b.kart.finished) return 1;
-      return b.kart.progress() - a.kart.progress();
+      const fa = a.kind === "remote" ? !!(a.snaps.length && a.snaps[a.snaps.length - 1].f & FLAG.done) : a.kart.finished;
+      const fb = b.kind === "remote" ? !!(b.snaps.length && b.snaps[b.snaps.length - 1].f & FLAG.done) : b.kart.finished;
+      if (fa && fb && a.kind !== "remote" && b.kind !== "remote") return a.kart.finishMs - b.kart.finishMs;
+      if (fa !== fb) return fa ? -1 : 1;
+      return this.progressOf(b) - this.progressOf(a);
     });
   }
 
-  private sendResult() {
-    this.resultSent = true;
+  private localResult(): RaceResult {
     const p = this.player!;
     const order = this.standings();
     const L = this.track!.length;
     const t = this.raceT * 1000;
     const standings: Standing[] = order.map((r) => {
       let ms = r.kart.finishMs;
-      if (!r.kart.finished) {
-        const left = this.laps * L - r.kart.progress();
-        ms = t + (left / Math.max(12, VMAX * 0.75)) * 1000;
+      if (r.kind === "remote" || !r.kart.finished) {
+        const left = this.laps * L - this.progressOf(r);
+        ms = t + (Math.max(0, left) / Math.max(12, VMAX * 0.75)) * 1000;
       }
-      return { name: r.def.name, player: r === p, timeMs: Math.round(ms), color: r.def.color };
+      return { id: r.spec.id, name: r.spec.name, player: r === p, timeMs: Math.round(ms), color: r.spec.color, kart: r.spec.kart };
     });
     standings.sort((a, b) => a.timeMs - b.timeMs);
-    const position = standings.findIndex((s) => s.player) + 1;
-    this.onEvent({
-      type: "finish",
-      result: {
-        position,
-        racers: this.racers.length,
-        timeMs: Math.round(p.kart.finishMs),
-        correct: this.correct,
-        answered: this.answered,
-        asked: this.asked,
-        coins: p.kart.coins,
-        standings,
-      },
-    });
+    return {
+      position: standings.findIndex((s) => s.player) + 1,
+      racers: this.racers.length,
+      timeMs: Math.round(p.kart.finishMs),
+      correct: this.correct,
+      answered: this.answered,
+      asked: this.asked,
+      coins: p.kart.coins,
+      standings,
+    };
+  }
+
+  private sendResult() {
+    this.resultSent = true;
+    this.onEvent({ type: "finish", result: this.localResult() });
   }
 
   private rowLogic(r: Racer) {
@@ -831,23 +1100,29 @@ export class Engine {
           if (lane >= rs.correctLane) lane++;
         }
         r.driver.target = { s: row.s, lat: rs.centers[lane] ?? 0 };
+        (r.driver as any).wantRight = right;
       }
       if (!(before > 0 && after <= 0 && before < 20)) return;
       if (k.lap < 0) return;
       // crossed the row: which lane?
       const hw = T.halfW;
       const lanes = rs.centers.length;
-      const vis = this.world?.rows[ri];
+      const vis = this.world && this.world.rows[ri];
       let lane = -1;
       if (Math.abs(k.lat) <= hw + 0.4 && lanes > 0) lane = Math.max(0, Math.min(lanes - 1, Math.floor(((k.lat + hw) / (2 * hw)) * lanes)));
-      if (vis && lane >= 0) {
-        vis.respawn[lane] = 1.3;
-        const bp = vis.boxes[lane].position;
-        this.fx.emit(20, bp, { color: ["#b49bff", "#ffffff", "#ffd23a"], speed: 5, up: 4 });
-      }
-      if (isPlayer) this.playerAnswer(ri, lane);
-      else if (lane >= 0) this.rivalAnswer(r, lane === rs.correctLane);
+      if (vis && lane >= 0) this.breakBox(ri, lane);
+      if (isPlayer && !k.finished) this.playerAnswer(ri, lane);
+      else if (lane >= 0 && r.kind === "ai") this.aiAnswer(r, r.driver ? (r.driver as any).wantRight !== false && lane === rs.correctLane : lane === rs.correctLane);
     });
+  }
+
+  private breakBox(ri: number, lane: number) {
+    const vis = this.world!.rows[ri];
+    if (vis.respawn[lane] > 0.4) return;
+    vis.respawn[lane] = 1.3;
+    const bp = vis.boxes[lane].position;
+    this.fx.emit(22, bp, { color: ["#b49bff", "#ffffff", "#ffd23a", "#8ce8ff"], speed: 6, up: 4, add: true });
+    this.fx.emit(10, bp, { color: ["#cbbcff", "#ffffff"], speed: 5, up: 5, size: 0.5, grav: 12 });
   }
 
   private playerAnswer(ri: number, lane: number) {
@@ -864,10 +1139,11 @@ export class Engine {
       const ok = lane === rs.correctLane;
       const picked = (tx.answers[rs.q] || [])[rs.order[lane]] ?? "";
       let shielded = false;
+      this.sfx.boxBreak();
       if (ok) {
         this.correct++;
         this.sfx.correct();
-        this.fx.emit(36, this.tmp.copy(p.kart.p).setY(p.kart.p.y + 2.2), { color: ["#3ddc6b", "#ffd23a", "#4fc3ff", "#ff7aa2"], speed: 6, up: 6, grav: 7 });
+        this.fx.emit(40, this.tmp.copy(p.kart.p).setY(p.kart.p.y + 2.2), { color: ["#3ddc6b", "#ffd23a", "#4fc3ff", "#ff7aa2"], speed: 6, up: 6, grav: 7, add: true });
         if (p.bonus || p.rollT > 0) {
           p.kart.coins = Math.min(COIN_MAX, p.kart.coins + 3);
         } else {
@@ -883,7 +1159,8 @@ export class Engine {
         } else {
           p.kart.spinOut(1.2);
           p.kart.coins = Math.max(0, p.kart.coins - 2);
-          this.fx.emit(16, this.tmp.copy(p.kart.p).setY(p.kart.p.y + 1.8), { color: ["#ffe45c", "#ffffff"], speed: 3, up: 3, grav: 3 });
+          this.rig.shake(0.4);
+          this.fx.emit(16, this.tmp.copy(p.kart.p).setY(p.kart.p.y + 1.8), { color: ["#ffe45c", "#ffffff"], speed: 3, up: 3, grav: 3, add: true });
         }
       }
       this.onEvent({ type: "answer", q: rs.q, correct: ok, picked, right, prompt, explain: tx.explains[rs.q] ?? "", shielded });
@@ -894,7 +1171,7 @@ export class Engine {
     this.drawRow(ri);
   }
 
-  private rivalAnswer(r: Racer, ok: boolean) {
+  private aiAnswer(r: Racer, ok: boolean) {
     if (ok) {
       if (!r.bonus && r.rollT <= 0) {
         r.rollT = ROLL_T;
@@ -916,23 +1193,22 @@ export class Engine {
       const e = coins.base[c].elements;
       const dx = e[12] - k.p.x,
         dz = e[14] - k.p.z;
-      if (dx * dx + dz * dz < 2.4) {
+      if (dx * dx + dz * dz < 2.6 && Math.abs(e[13] - k.p.y) < 2.5) {
         coins.hidden[c] = 7;
         if (k.coins < COIN_MAX) k.coins++;
-        if (r === this.player) {
-          this.sfx.coin();
-          this.fx.emit(8, this.tmp.set(e[12], e[13], e[14]), { color: ["#ffd23a", "#fff6c8"], speed: 2.5, up: 3 });
-        }
+        this.fx.emit(8, this.tmp.set(e[12], e[13], e[14]), { color: ["#ffd23a", "#fff6c8"], speed: 2.5, up: 3, add: true });
+        if (r === this.player) this.sfx.coin();
       }
     }
     // boost pads
-    for (let b = 0; b < T.boosts.length; b++) {
-      const bp = T.boosts[b];
-      if (Math.abs(deltaS(k.s, bp.s, T.length)) < 3 && Math.abs(k.lat - bp.lat) < 2.2) {
-        if (k.boostT < 0.5 && r === this.player) this.sfx.boost();
-        k.boostT = Math.max(k.boostT, 1.1);
+    if (!k.air)
+      for (let b = 0; b < T.boosts.length; b++) {
+        const bp = T.boosts[b];
+        if (Math.abs(deltaS(k.s, bp.s, T.length)) < 3 && Math.abs(k.lat - bp.lat) < 2.2) {
+          if (k.boostT < 0.5 && r === this.player) this.sfx.boost();
+          k.boostT = Math.max(k.boostT, 1.2);
+        }
       }
-    }
   }
 
   private peelLogic(dt: number) {
@@ -941,16 +1217,19 @@ export class Engine {
       pl.t += dt;
       let hit = false;
       for (let j = 0; j < this.racers.length && !hit; j++) {
-        const k = this.racers[j].kart;
-        if (j === pl.owner && pl.t < 1.2) continue;
+        const r = this.racers[j];
+        if (r.kind === "remote") continue; // their own client checks them
+        const k = r.kart;
+        if (r.spec.id === pl.owner && pl.t < 1.2) continue;
         const dx = k.p.x - pl.p.x,
           dz = k.p.z - pl.p.z;
-        if (dx * dx + dz * dz < 1.6 * 1.6) {
-          if (k.novaT <= 0) this.knock(k, "peel");
+        if (dx * dx + dz * dz < 1.6 * 1.6 && Math.abs(k.p.y - pl.p.y) < 1.5) {
+          if (k.novaT <= 0) this.knock(r, "peel");
           hit = true;
         }
       }
       if (hit || pl.t > 70) {
+        if (hit && this.net && this.setup) this.net.send({ t: "ev", r: this.setup.raceId, k: "peelGone", id: pl.id }, true);
         this.scene.remove(pl.obj);
         this.peels.splice(i, 1);
       } else pl.obj.position.y = pl.p.y + 0.05;
@@ -959,20 +1238,106 @@ export class Engine {
 
   // ---------------------------------------------------------------- visuals
   private setLamps(n: number) {
-    const lamps = this.world?.lamps ?? [];
+    const lamps = this.world ? this.world.lamps : [];
     lamps.forEach((m, k) => {
       const on = n === 5 ? true : k < n * 2 - (n > 2 ? 1 : 0);
       const go = n === 5;
       m.emissive.set(go ? "#2bff6a" : "#ff2a1a");
-      m.emissiveIntensity = on ? 3.2 : 0;
+      m.emissiveIntensity = on ? 4 : 0;
       m.color.set(on ? (go ? "#3cff7a" : "#ff4a3a") : "#40141a");
     });
   }
 
-  private animate(dt: number) {
+  /** Remote karts: interpolate between the last snapshots (render a little in the past). */
+  private remoteMotion(r: Racer, dt: number) {
+    const k = r.kart;
+    const sn = r.snaps;
+    if (!sn.length || !this.net) return;
+    const t = this.net.now() - INTERP_MS;
+    let a = sn[0],
+      b = sn[sn.length - 1];
+    for (let i = sn.length - 1; i > 0; i--)
+      if (sn[i - 1].h <= t) {
+        a = sn[i - 1];
+        b = sn[i];
+        break;
+      }
+    let x: number, y: number, z: number, yaw: number;
+    if (t >= b.h) {
+      // extrapolate a little past the newest snapshot
+      const e = Math.min(0.25, (t - b.h) / 1000);
+      x = b.x - Math.sin(b.yaw) * b.sp * e;
+      z = b.z - Math.cos(b.yaw) * b.sp * e;
+      y = b.y;
+      yaw = b.yaw;
+    } else {
+      const u = b.h > a.h ? THREE.MathUtils.clamp((t - a.h) / (b.h - a.h), 0, 1) : 1;
+      x = a.x + (b.x - a.x) * u;
+      y = a.y + (b.y - a.y) * u;
+      z = a.z + (b.z - a.z) * u;
+      let d = b.yaw - a.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      yaw = a.yaw + d * u;
+    }
+    const prevS = k.s;
+    k.p.set(x, y, z);
+    k.yaw = yaw;
+    k.speed = b.sp;
+    k.drifting = !!(b.f & FLAG.drift);
+    k.driftDir = b.f & FLAG.right ? 1 : -1;
+    k.driftT = b.dt;
+    k.boostT = b.f & FLAG.boost ? 0.3 : 0;
+    const spinning = !!(b.f & FLAG.spin);
+    if (spinning) k.spinYaw += dt * 9;
+    else k.spinYaw = 0;
+    k.spinT = spinning ? 0.5 : 0;
+    k.shieldT = b.f & FLAG.shield ? 1 : 0;
+    k.novaT = b.f & FLAG.nova ? 1 : 0;
+    k.air = !!(b.f & FLAG.air);
+    if (b.f & FLAG.trick && k.trickT <= 0 && !k.tricked) {
+      k.trickT = 0.45;
+      k.tricked = true;
+      k.trickDir = 1;
+    }
+    if (!(b.f & FLAG.air)) k.tricked = false;
+    if (k.trickT > 0) k.trickT = Math.max(0, k.trickT - dt);
+    k.coins = b.c;
+    k.lap = b.lap;
+    k.finished = !!(b.f & FLAG.done);
+    // ground info for the visuals (tilt, shadow, wheels)
+    const L = this.track!;
+    const located = locate(L, k.p, k.idx, k.loc);
+    k.idx = located.i;
+    k.s = L.samples[located.i].s;
+    // the drawn position runs a little behind (or ahead of) the newest snapshot: keep lap and s consistent at the line
+    if (b.s > L.length * 0.8 && k.s < L.length * 0.2) k.lap = b.lap + 1;
+    else if (b.s < L.length * 0.2 && k.s > L.length * 0.8) k.lap = b.lap - 1;
+    const sm = L.samples[located.i];
+    const f = k.forward;
+    const cosA = f.x * sm.T.x + f.z * sm.T.z;
+    k.roll += ((k.air ? 0 : sm.bank * cosA) - k.roll) * Math.min(1, dt * 8);
+    k.pitch += ((k.air ? 0 : Math.atan(sm.slope + located.rampSlope) * cosA) - k.pitch) * Math.min(1, dt * 10);
+    k.wheelSpin += (k.speed * dt) / 0.32;
+    k.steerSm = 0;
+    // passing boxes break them for everyone
     const T = this.track!;
+    T.rows.forEach((row, ri) => {
+      const before = deltaS(prevS, row.s, T.length);
+      const after = deltaS(k.s, row.s, T.length);
+      if (before > 0 && after <= 0 && before < 20 && Math.abs(k.lat) <= T.halfW && this.rows[ri].centers.length) {
+        const lanes = this.rows[ri].centers.length;
+        const lane = Math.max(0, Math.min(lanes - 1, Math.floor(((k.lat + T.halfW) / (2 * T.halfW)) * lanes)));
+        this.breakBox(ri, lane);
+      }
+    });
+  }
+
+  private animate(dt: number) {
     const w = this.world!;
-    const t = performance.now() / 1000;
+    const T = this.track!;
+    const t = this.time;
+    w.update(t, dt);
     // boxes spin and bob; hit boxes pop back in
     w.rows.forEach((vis, ri) => {
       const rs = this.rows[ri];
@@ -997,125 +1362,197 @@ export class Engine {
       }
     });
     // boost pads pulse
-    w.boostGlow.forEach((m) => (m.emissiveIntensity = 2.2 + Math.sin(t * 9) * 1.2));
+    w.boostGlow.forEach((m) => (m.emissiveIntensity = 2.4 + Math.sin(t * 9) * 1.3));
     // coins spin, collected ones come back later
     this.coinSpin += dt * 3;
     const cv = w.coins;
     const rot = this.q.setFromAxisAngle(UP, this.coinSpin);
+    const M = new THREE.Matrix4();
     for (let c = 0; c < cv.base.length; c++) {
       if (cv.hidden[c] > 0) cv.hidden[c] -= dt;
       const e = cv.base[c].elements;
       const vis = cv.hidden[c] <= 0;
       this.mtx.compose(this.tmp.set(e[12], e[13] + Math.sin(t * 3 + c) * 0.12, e[14]), rot, this.tmp2.setScalar(vis ? 1 : 0.0001));
-      for (let m = 0; m < cv.mesh.length; m++) {
-        const M = new THREE.Matrix4().multiplyMatrices(this.mtx, cv.locals[m]);
-        cv.mesh[m].setMatrixAt(c, M);
-      }
+      for (let m = 0; m < cv.mesh.length; m++) cv.mesh[m].setMatrixAt(c, M.multiplyMatrices(this.mtx, cv.locals[m]));
     }
     cv.mesh.forEach((m) => (m.instanceMatrix.needsUpdate = true));
-    // peels wobble
     this.peels.forEach((p) => (p.obj.rotation.y += dt * 0.5));
 
     // karts
+    const cam = this.camera.position;
     this.racers.forEach((r) => {
+      if (r.kind === "remote" && this.phase !== "podium") this.remoteMotion(r, dt);
       const k = r.kart;
-      const v = r.view;
-      v.root.position.copy(k.p);
-      v.root.rotation.y = k.yaw;
-      v.body.rotation.y = k.spinYaw + (k.drifting ? k.driftDir * -0.32 : 0);
-      v.body.position.y = Math.sin(Math.min(1, k.hop / 0.35) * Math.PI) * 0.35;
-      v.body.rotation.z = k.drifting ? k.driftDir * 0.05 : -k.steerSm * 0.04 * Math.min(1, k.speed / 15);
-      v.wheelsF.forEach((wh) => {
-        wh.rotation.x = k.wheelSpin;
-        wh.rotation.y = -k.steerSm * 0.45;
-      });
-      v.wheelsB.forEach((wh) => (wh.rotation.x = k.wheelSpin));
-      if (v.character) v.character.rotation.z = k.steerSm * 0.12;
-      v.shield.visible = k.shieldT > 0;
-      if (v.shield.visible) v.shield.scale.setScalar(1 + Math.sin(t * 6) * 0.03);
-      if (v.tag) {
-        const d2 = this.camera.position.distanceToSquared(k.p);
-        v.tag.visible = d2 > 9 * 9 && d2 < 90 * 90;
-      }
-      // trails
-      const f = k.forward;
-      const back = this.tmp.copy(k.p).addScaledVector(f, -1.2);
-      back.y += 0.35;
-      if (k.drifting && k.driftT > 0.25) {
-        const col = k.driftT > 1.7 ? ["#ff8a1e", "#ffd23a"] : k.driftT > 0.8 ? ["#4fc3ff", "#bfefff"] : ["#ffffff", "#dddddd"];
-        this.fx.emit(1, back, { color: col, speed: 2.2, up: 2, size: 0.28, life: 0.35 });
-      }
-      if (k.boostT > 0) this.fx.emit(1, back, { color: ["#ff8a1e", "#ffd23a", "#ff5a1e"], speed: 2, up: 1, size: 0.45, life: 0.3, grav: -2, dir: f.clone().multiplyScalar(-1) });
-      if (k.novaT > 0) this.fx.emit(1, this.tmp2.copy(k.p).setY(k.p.y + 1), { color: [BONUS_COLOR.nova, "#ffffff", "#4fc3ff", "#ffd23a"], speed: 2, up: 2, size: 0.35, life: 0.5, grav: 1 });
-      if (k.onGrass && k.speed > 6 && Math.random() < 0.4) this.fx.emit(1, back, { color: ["#9b8a62", "#b8a77c"], speed: 1.2, up: 1.4, size: 0.5, life: 0.5, grav: 1 });
+      r.view.update(k, t, dt, cam);
+      this.kartFx(r, dt);
     });
+    this.podiumFx(dt);
     void T;
   }
 
-  private snapCamera() {
-    const target = this.camTarget();
-    if (!target) return;
-    const f = target.forward;
-    this.camYaw = target.yaw;
-    this.camPos.copy(target.p).addScaledVector(f, -7.2).setY(target.p.y + 3.9);
-    this.camLook.copy(target.p).addScaledVector(f, 9).setY(target.p.y + 1.0);
-    this.camera.position.copy(this.camPos);
-    this.camera.lookAt(this.camLook);
+  private kartFx(r: Racer, dt: number) {
+    const k = r.kart;
+    const v = r.view;
+    const side = this.tmp2.set(Math.cos(k.yaw), 0, -Math.sin(k.yaw));
+    // drift sparks from the rear wheels, colour by mini-turbo level
+    r.sparkT -= dt;
+    if (k.drifting && !k.air && k.driftT > 0.2) {
+      if (r.sparkT <= 0) {
+        r.sparkT = 0.035;
+        const col = k.driftT > 1.7 ? ["#ff8a1e", "#ffd23a", "#fff1a8"] : k.driftT > 0.8 ? ["#4fc3ff", "#bfefff", "#ffffff"] : ["#ffffff", "#ffe9b0"];
+        const big = k.driftT > 0.8;
+        [v.sparkL, v.sparkR].forEach((lp) => {
+          const wp = v.world(lp, this.tmp);
+          this.fx.emit(big ? 2 : 1, wp, { color: col, speed: big ? 4 : 2.5, up: big ? 3 : 1.5, size: big ? 0.3 : 0.18, life: 0.3, grav: 9, add: true });
+        });
+      }
+      ["L", "R"].forEach((s, i) => {
+        const wp = v.world(i ? v.sparkR : v.sparkL, this.tmp);
+        wp.y = k.loc.y;
+        this.skids.mark(r.spec.id + s, wp, side, 0.32, 0.9);
+      });
+    } else if (!k.air && k.speed > 10 && (k.wallContact || k.spinT > 0)) {
+      ["L", "R"].forEach((s, i) => {
+        const wp = v.world(i ? v.sparkR : v.sparkL, this.tmp);
+        wp.y = k.loc.y;
+        this.skids.mark(r.spec.id + s, wp, side, 0.3, 0.6);
+      });
+    } else {
+      this.skids.lift(r.spec.id + "L");
+      this.skids.lift(r.spec.id + "R");
+    }
+    const back = this.tmp.copy(k.p).addScaledVector(k.forward, -1.3);
+    back.y += 0.45;
+    if (k.boostT > 0 && Math.random() < 0.6) this.fx.emit(1, back, { color: ["#ff8a1e", "#ffd23a", "#ff5a1e"], speed: 2, up: 1, size: 0.5, life: 0.28, grav: -2, dir: k.forward.multiplyScalar(-1), add: true });
+    if (k.novaT > 0) this.fx.emit(1, this.tmp.copy(k.p).setY(k.p.y + 1), { color: [BONUS_COLOR.nova, "#ffffff", "#4fc3ff", "#ffd23a"], speed: 2, up: 2, size: 0.35, life: 0.5, grav: 1, add: true });
+    if (k.onGrass && k.speed > 6 && Math.random() < 0.45) this.fx.emit(1, back.setY(k.p.y + 0.3), { color: ["#9b8a62", "#b8a77c"], speed: 1.4, up: 1.6, size: 0.6, life: 0.55, grav: 1 });
   }
 
   private camTarget(): Kart | null {
     if (this.player) return this.player.kart;
     if (this.focus !== null && this.racers[this.focus]) return this.racers[this.focus].kart;
-    // demo: follow the leader
+    // demo / spectating: follow the leader (or a chosen racer)
     const s = this.standings();
-    return s.length ? s[0].kart : null;
+    if (!s.length) return null;
+    return s[Math.min(this.spectateIdx, s.length - 1)].kart;
+  }
+  /** Spectators: look at the next racer. */
+  spectateNext() {
+    this.spectateIdx = (this.spectateIdx + 1) % Math.max(1, this.racers.length);
   }
 
   private updateCamera(dt: number) {
     const k = this.camTarget();
-    if (!k) return;
-    if (this.phase === "demo" || (this.phase === "finished" && this.finishT > 0.6)) {
-      // slow orbit around the kart
-      this.demoT += dt * 0.35;
-      const a = k.yaw + Math.PI * 0.75 + Math.sin(this.demoT) * 0.9;
-      const want = this.tmp.set(k.p.x + Math.sin(a) * 9, k.p.y + 3.6, k.p.z + Math.cos(a) * 9);
-      this.camPos.lerp(want, 1 - Math.exp(-dt * 2.5));
-      this.camLook.lerp(this.tmp2.copy(k.p).setY(k.p.y + 1), 1 - Math.exp(-dt * 6));
-    } else {
-      // chase cam follows the kart's travel direction, not its spin
-      let d = k.yaw - this.camYaw;
-      while (d > Math.PI) d -= Math.PI * 2;
-      while (d < -Math.PI) d += Math.PI * 2;
-      this.camYaw += d * (1 - Math.exp(-dt * 5));
-      const f = this.tmp2.set(-Math.sin(this.camYaw), 0, -Math.cos(this.camYaw));
-      const sp = Math.max(0, k.speed) / VMAX;
-      const back = 7.2 + sp * 1.2 + (k.boostT > 0 ? 0.8 : 0);
-      const want = this.tmp.copy(k.p).addScaledVector(f, -back);
-      want.y = k.p.y + 3.9 + sp * 0.3;
-      this.camPos.lerp(want, 1 - Math.exp(-dt * 10));
-      const look = this.tmp.copy(k.p).addScaledVector(f, 9);
-      look.y = k.p.y + 1.0;
-      this.camLook.lerp(look, 1 - Math.exp(-dt * 12));
-      const fovBase = this.camera.aspect < 1 ? 78 : 62;
-      const fov = fovBase + sp * 6 + (k.boostT > 0 ? 7 : 0);
-      this.camera.fov += (fov - this.camera.fov) * (1 - Math.exp(-dt * 4));
-      this.camera.updateProjectionMatrix();
-    }
-    this.camera.position.copy(this.camPos);
-    this.camera.lookAt(this.camLook);
-    // shadows follow the camera
-    this.sun.target.position.copy(k.p);
-    this.sun.position.copy(k.p).addScaledVector(this.sky.sunDir, 120);
+    if (this.phase === "demo" && this.rig.mode !== "orbit") this.rig.mode = "orbit";
+    if (this.phase === "finished" && this.finishT > 0.6 && this.rig.mode === "chase") this.rig.mode = "orbit";
+    if (!this.player && this.setup && this.setup.mode === "online" && this.rig.mode === "orbit" && this.phase === "racing") this.rig.mode = "chase";
+    this.rig.update(dt, k);
+    // shadows follow the camera target
+    const c = k ? k.p : this.camera.position;
+    this.sun.target.position.copy(c);
+    this.sun.position.copy(c).addScaledVector(this.sky.sunDir, 150);
     this.sky.mesh.position.copy(this.camera.position);
     // engine sound
     if (this.player && (this.phase === "racing" || this.phase === "countdown") && !this.paused) this.sfx.engine(Math.min(1, Math.max(0, this.player.kart.speed) / (VMAX * 1.3)), this.player.kart.boostT > 0, true);
     else this.sfx.engine(0, false, false);
   }
 
+  /** Results: winners on the podium, trophy, confetti, camera on them. */
+  showPodium(order: string[]) {
+    const w = this.world;
+    if (!w || !w.podium) return;
+    this.phase = "podium";
+    const pd = w.podium;
+    this.racers.forEach((r) => {
+      r.view.root.visible = false;
+      r.view.noTag = true;
+    });
+    order.slice(0, 3).forEach((id, k) => {
+      const r = this.racers.find((x) => x.spec.id === id);
+      if (!r || !pd.spots[k]) return;
+      r.view.root.visible = true;
+      r.kart.p.copy(pd.spots[k]);
+      r.kart.yaw = pd.yaw + Math.PI;
+      r.kart.speed = 0;
+      r.kart.drifting = false;
+      r.kart.boostT = r.kart.spinT = r.kart.novaT = r.kart.shieldT = 0;
+      r.kart.roll = r.kart.pitch = 0;
+      r.kart.air = false;
+      r.kart.loc.y = pd.spots[k].y;
+      r.kind = "ai";
+      r.driver = null;
+    });
+    if (pd.trophy) {
+      pd.trophy.visible = true;
+      pd.trophy.position.copy(pd.spots[0]).setY(pd.spots[0].y + 2.4);
+    }
+    const across = new THREE.Vector3().subVectors(pd.look, pd.camPos).setY(0).normalize();
+    const right = new THREE.Vector3(-across.z, 0, across.x);
+    const wide = this.camera.aspect > 1.2;
+    // wide screens: the podium sits in the left half, beside the results card
+    this.rig.setPodium(pd.camPos.clone().addScaledVector(right, wide ? 0.6 : 0).addScaledVector(across, wide ? -1.8 : 0), pd.look.clone().addScaledVector(right, wide ? 1.7 : 0).setY(pd.look.y - (wide ? 0 : 1)));
+    this.sfx.cheer();
+  }
+  /** Back from the podium to a background race. */
+  get onPodium() {
+    return this.phase === "podium";
+  }
+
+  private podiumFx(dt: number) {
+    const w = this.world;
+    if (this.phase !== "podium" || !w || !w.podium) return;
+    const pd = w.podium;
+    if (pd.trophy) pd.trophy.rotation.y += dt * 1.5;
+    if (Math.random() < dt * 12) {
+      const s = pd.spots[Math.floor(Math.random() * 3)];
+      this.fx.emit(6, this.tmp.copy(s).setY(s.y + 6), { color: ["#ff5fa8", "#ffd23a", "#4fc3ff", "#7ee05a", "#ffffff", "#c86bff"], speed: 4, up: 1, grav: 3, life: 2.4, size: 0.32, drag: 0.8 });
+    }
+    if (Math.random() < dt * 0.9) {
+      const s = pd.spots[0];
+      const at = this.tmp.copy(s).add(new THREE.Vector3((Math.random() - 0.5) * 30, 18 + Math.random() * 8, (Math.random() - 0.5) * 10));
+      this.fx.emit(46, at, { color: [["#ff5fa8", "#ffd23a"], ["#4fc3ff", "#ffffff"], ["#7ee05a", "#ffd23a"]][Math.floor(Math.random() * 3)], speed: 9, up: 2, grav: 4, life: 1.4, size: 0.42, drag: 1.2, add: true });
+      this.sfx.firework();
+    }
+  }
+
   private emitHud() {
     const T = this.track;
+    const st = this.setup;
+    if (!T || !st) return;
     const p = this.player;
-    if (!T || !p) return;
+    const order = this.standings();
+    const hudOrder: HudRacer[] = order.map((r) => ({ id: r.spec.id, name: r.spec.name, color: r.spec.color, me: r === p }));
+    const focus = this.camTarget();
+    if (!p) {
+      const k = focus;
+      this.onHud({
+        phase: this.phase,
+        count: this.count,
+        timeMs: this.raceT * 1000,
+        lap: k ? Math.max(1, Math.min(this.laps, k.lap + 1)) : 1,
+        laps: this.laps,
+        pos: 0,
+        racers: this.racers.length,
+        coins: 0,
+        bonus: null,
+        charges: 0,
+        rolling: false,
+        rollFace: "turbo",
+        speed: k ? Math.max(0, k.speed) * 3.6 : 0,
+        question: null,
+        shield: false,
+        nova: false,
+        boost: false,
+        spin: false,
+        air: false,
+        drift: 0,
+        map: { player: k ? [k.p.x, k.p.z] : [0, 0], rivals: this.racers.filter((r) => r.kart !== k).map((r) => ({ x: r.kart.p.x, z: r.kart.p.z, color: r.spec.color })) },
+        order: hudOrder,
+        finished: false,
+        spectating: true,
+      });
+      return;
+    }
     const k = p.kart;
     // the next row ahead within 130 m shows its question
     let question: HudQuestion | null = null;
@@ -1124,7 +1561,7 @@ export class Engine {
     T.rows.forEach((row, ri) => {
       const d = deltaS(k.s, row.s, T.length);
       const rs = this.rows[ri];
-      if (d > 0 && d < 130 && d < best && rs.feedbackT <= 0 && k.lap >= 0 && !k.finished) {
+      if (d > 0 && d < 130 && d < best && rs.feedbackT <= 0 && k.lap >= 0 && !k.finished && (this.phase === "racing" || this.phase === "finished")) {
         best = d;
         bestRow = ri;
       }
@@ -1146,11 +1583,11 @@ export class Engine {
     const faces: BonusId[] = ["turbo", "shield", "peel", "coins", "nova", "triple"];
     const rolling = p.rollT > 0;
     if (rolling && Math.floor(p.rollT * 14) !== Math.floor((p.rollT + HUD_MS / 1000) * 14)) this.sfx.roulette(Math.floor(p.rollT * 14));
-    const rivals = this.racers.filter((r) => r !== p).map((r) => ({ x: r.kart.p.x, z: r.kart.p.z, color: r.def.color }));
+    const rivals = this.racers.filter((r) => r !== p).map((r) => ({ x: r.kart.p.x, z: r.kart.p.z, color: r.spec.color }));
     this.onHud({
       phase: this.phase,
       count: this.count,
-      timeMs: this.phase === "finished" ? k.finishMs : this.raceT * 1000,
+      timeMs: this.phase === "finished" || this.phase === "podium" ? k.finishMs : this.raceT * 1000,
       lap: Math.max(1, Math.min(this.laps, k.lap + 1)),
       laps: this.laps,
       pos: this.positionOf(p),
@@ -1166,9 +1603,12 @@ export class Engine {
       nova: k.novaT > 0,
       boost: k.boostT > 0,
       spin: k.spinT > 0,
+      air: k.air,
       drift: k.drifting ? (k.driftT > 1.7 ? 3 : k.driftT > 0.8 ? 2 : 1) : 0,
       map: { player: [k.p.x, k.p.z], rivals },
+      order: hudOrder,
       finished: k.finished,
+      spectating: false,
     });
   }
 
@@ -1184,29 +1624,12 @@ export class Engine {
     cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.resize);
     this.input.detach();
-    this.clearCup();
+    this.clear();
     this.fx.dispose();
-    this.renderer.dispose();
+    this.skids.dispose();
+    if (this.envTex) this.envTex.dispose();
+    this.r.dispose();
   }
 }
 
-export function shuffle<T>(a: T[]): T[] {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const t = a[i];
-    a[i] = a[j];
-    a[j] = t;
-  }
-  return a;
-}
-
-function hashStr(s: string) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-export { KART_COLORS, wrapS, sampleAt };
+export { wrapS, sampleAt, pointAt };
