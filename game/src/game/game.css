@@ -10,8 +10,9 @@
   --txt: #ffffff;
   position: relative;
   width: 100%;
-  height: 100%;
-  min-height: 100vh;
+  /* the script sets the exact visible height; these are the fallbacks until it runs */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: #9ec8ff;
   color: var(--txt);
@@ -51,7 +52,9 @@
   background: linear-gradient(180deg, rgba(58, 45, 125, 0.96), rgba(36, 28, 84, 0.96));
   border: 4px solid var(--lav);
   border-radius: 26px;
-  padding: clamp(14px, 3vw, 26px);
+  --padv: clamp(14px, 3vw, 26px);
+  --padh: clamp(14px, 3vw, 26px);
+  padding: var(--padv) var(--padh);
   max-width: min(560px, 100%);
   width: 100%;
   box-shadow: 0 10px 0 rgba(20, 12, 50, 0.45), 0 18px 40px rgba(10, 6, 30, 0.4);
@@ -1610,7 +1613,8 @@
     display: none;
   }
   .qk-card {
-    padding: 10px 14px;
+    --padv: 10px;
+    --padh: 14px;
   }
   .qk-card h2 {
     margin-bottom: 6px;
@@ -1708,5 +1712,103 @@
   .qk-intro,
   .qk-players li {
     animation: none;
+  }
+}
+
+/* --- short screens: cards scroll, their action buttons stay in view at the bottom */
+.qk-scroll {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.qk-scroll > .qk-row.end:last-child,
+.qk-scroll .qk-lobbyfoot,
+.qk-scroll .qk-create > .qk-row.end {
+  position: sticky;
+  /* sticky offsets count from inside the card's padding: reach its inner edge */
+  bottom: calc(-1 * var(--padv));
+  z-index: 2;
+  margin-left: calc(-1 * var(--padh));
+  margin-right: calc(-1 * var(--padh));
+  padding: 10px var(--padh) 2px;
+  background: linear-gradient(180deg, rgba(36, 28, 84, 0), rgba(36, 28, 84, 0.98) 9px);
+}
+.qk-scroll > .qk-row.end:last-child,
+.qk-scroll .qk-lobbyfoot {
+  margin-bottom: calc(-1 * var(--padv));
+  padding-bottom: var(--padv);
+}
+.qk-scroll .qk-create > .qk-row.end {
+  /* inside the create panel: full width of the panel only */
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+  background: linear-gradient(180deg, rgba(48, 38, 108, 0), rgba(48, 38, 108, 0.98) 9px);
+}
+@media (max-height: 420px) and (orientation: landscape) {
+  .qk-center {
+    padding-top: max(6px, env(safe-area-inset-top));
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+  .qk-scroll {
+    max-height: 100%;
+  }
+  .qk-reshead .qk-trophy,
+  .qk-reshead svg {
+    width: 40px;
+    height: 40px;
+  }
+  .qk-stats b {
+    font-size: 22px;
+  }
+  .qk-share .qk-qr,
+  .qk-share canvas,
+  .qk-share svg,
+  .qk-share img {
+    max-width: 96px;
+    max-height: 96px;
+  }
+  .qk-row,
+  .qk-lobbyfoot {
+    margin-top: 8px;
+  }
+  .qk-btn {
+    min-height: 40px;
+    padding: 8px 18px;
+  }
+  .qk-share .qk-note,
+  .qk-cupmini span,
+  .qk-tile .ic,
+  .qk-create .qk-note {
+    display: none;
+  }
+  .qk-seg.big button {
+    min-height: 38px;
+    padding: 4px 10px;
+  }
+  .qk-share h3 {
+    margin: 0 0 4px;
+    font-size: 14px;
+  }
+  .qk-lobby .qk-codetiles span {
+    width: 28px;
+    height: 34px;
+    font-size: 19px;
+  }
+  .qk-lobby h3 {
+    margin: 4px 0;
+    font-size: 14px;
+  }
+  .qk-players li {
+    padding: 3px 8px;
+  }
+}
+@media (max-width: 520px) and (orientation: portrait) {
+  .qk-share .qk-qr {
+    width: 132px;
+    height: 132px;
+  }
+  .qk-share .qk-note {
+    display: none;
   }
 }

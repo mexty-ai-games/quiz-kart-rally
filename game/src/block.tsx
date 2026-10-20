@@ -332,6 +332,38 @@ export const Block: React.FC<BlockProps> = (props) => {
   const prefix = props.boardPrefix || "cup";
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Fit the game to the part of the screen you can actually see. On phones, 100vh is the height with
+  // the browser bars hidden, so a 100vh game loses its bottom (touch buttons, menu buttons) under them.
+  useEffect(() => {
+    let raf = 0;
+    const fit = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = rootRef.current;
+        if (!el) return;
+        const vv = window.visualViewport;
+        const vh = vv ? vv.height : window.innerHeight;
+        const top = Math.max(0, el.getBoundingClientRect().top + (window.scrollY || 0));
+        // a header above the game (player bar) comes off the height; a game further down a page keeps the full screen
+        const h = Math.max(240, Math.round(top < vh * 0.4 ? vh - top : vh));
+        if (el.style.height !== h + "px") el.style.height = h + "px";
+      });
+    };
+    fit();
+    const vv = window.visualViewport;
+    window.addEventListener("resize", fit);
+    window.addEventListener("orientationchange", fit);
+    if (vv) vv.addEventListener("resize", fit);
+    const iv = window.setInterval(fit, 1000); // host layout changes (headers appearing, iframes resized)
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", fit);
+      window.removeEventListener("orientationchange", fit);
+      if (vv) vv.removeEventListener("resize", fit);
+      window.clearInterval(iv);
+    };
+  }, []);
   const engineRef = useRef<Engine | null>(null);
   const sfxRef = useRef<Sfx>(new Sfx());
   const hudStore = useMemo(makeHudStore, []);
@@ -831,7 +863,7 @@ export const Block: React.FC<BlockProps> = (props) => {
   // ------------------------------------------------------------ render
   if (cups.length === 0) {
     return (
-      <div className="qk-root">
+      <div ref={rootRef} className="qk-root">
         <div className="qk-center">
           <div className="qk-card">
             <h2>{t(props.title) || "Quiz Kart Rally"}</h2>
@@ -876,7 +908,7 @@ export const Block: React.FC<BlockProps> = (props) => {
   };
 
   return (
-    <div className={`qk-root tier-${tierNow}`} {...uiSounds}>
+    <div ref={rootRef} className={`qk-root tier-${tierNow}`} {...uiSounds}>
       <canvas ref={canvasRef} className="qk-canvas" />
       {screen === "loading" && <Loading p={loadP} label={t(ui.loading)} title={t(props.title)} />}
       {screen === "title" && (

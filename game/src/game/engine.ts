@@ -307,6 +307,11 @@ export class Engine {
     this.input.attach();
     this.resize();
     window.addEventListener("resize", this.resize);
+    // the game area can change size without the window resizing (phone browser bars, host layout)
+    if (typeof ResizeObserver !== "undefined") {
+      this.ro = new ResizeObserver(() => this.resize());
+      this.ro.observe(canvas);
+    }
     this.last = performance.now();
     this.loop();
   }
@@ -345,6 +350,7 @@ export class Engine {
     this.r.setTier(t);
   }
 
+  private ro: ResizeObserver | null = null;
   resize = () => {
     const c = this.canvas;
     const w = c.clientWidth || window.innerWidth;
@@ -1623,6 +1629,7 @@ export class Engine {
     this.running = false;
     cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.resize);
+    if (this.ro) this.ro.disconnect();
     this.input.detach();
     this.clear();
     this.fx.dispose();

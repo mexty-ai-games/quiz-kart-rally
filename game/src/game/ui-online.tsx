@@ -1,5 +1,5 @@
 /** Online screens: the hub (quick race, join by code, create, open races), the code keypad and the lobby room. */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import qrcode from "qrcode-generator";
 import type { Cup, UiText, RacerText } from "./types";
 import type { LobbyAd, LobbyState } from "../net/lobby";
@@ -101,6 +101,12 @@ export const OnlineHub: React.FC<{
   const [creating, setCreating] = useState(false);
   const [pub, setPub] = useState(false);
   const [cupIdx, setCupIdx] = useState(0);
+  const createRef = useRef<HTMLDivElement>(null);
+  // short screens: bring the opened panel (cups and its Create button) into view
+  useEffect(() => {
+    const el = createRef.current;
+    if (creating && el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [creating]);
   const offline = status === "error";
   return (
     <div className="qk-center">
@@ -130,7 +136,7 @@ export const OnlineHub: React.FC<{
           </button>
         </div>
         {creating && (
-          <div className="qk-create">
+          <div className="qk-create" ref={createRef}>
             <div className="qk-seg big" role="radiogroup">
               <button className={!pub ? "on" : ""} onClick={() => setPub(false)} role="radio" aria-checked={!pub}>
                 🔒 {t(ui.privateRace)}
